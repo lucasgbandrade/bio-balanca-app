@@ -1,0 +1,18 @@
+{
+  "appId": "app.biobalanca",
+  "appName": "Bio Balança",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#0b0f14"
+  },
+  "plugins": {
+    "BluetoothLe": {
+      "displayStrings": {
+        "scanning": "Procurando a balança…",
+        "cancel": "Cancelar",
+        "availableDevices": "Aparelhos disponíveis",
+        "noDeviceFound": "Nenhum aparelho encontrado"
+      }
+    }
+  }
+}

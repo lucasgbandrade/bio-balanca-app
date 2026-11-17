@@ -1,0 +1,1469 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b0f14">
+<meta name="description" content="Lê o peso da balança Bluetooth e calcula a composição corporal.">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Bio Balança">
+<title>Bio Balança</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0b0f14; --panel:#121821; --panel2:#18202b; --line:#232d3a;
+  --text:#e8eef5; --muted:#8a97a8; --accent:#3ee6b5; --accent2:#4aa8ff;
+  --warn:#ffb547; --bad:#ff6b7a; --low:#7cc4ff; --radius:18px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--text);font-family:Manrope,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+body{min-height:100vh;padding-bottom:84px}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+input,select{font:inherit;color:var(--text);background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px 14px;width:100%;outline:none}
+input:focus,select:focus{border-color:var(--accent)}
+.wrap{max-width:560px;margin:0 auto;padding:0 18px}
+header{display:flex;align-items:center;justify-content:space-between;padding:18px 0 10px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:-.02em;font-size:19px}
+.brand i{width:30px;height:30px;border-radius:10px;background:conic-gradient(from 200deg,var(--accent),var(--accent2),var(--accent));display:grid;place-items:center}
+.brand i:after{content:"";width:12px;height:12px;border-radius:50%;background:var(--bg)}
+.pill{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--muted);background:var(--panel);border:1px solid var(--line);padding:7px 12px;border-radius:999px}
+.dot{width:8px;height:8px;border-radius:50%;background:#55606e}
+.pill.on .dot{background:var(--accent);box-shadow:0 0 0 4px rgba(62,230,181,.18)}
+.pill.busy .dot{background:var(--warn);animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.3}}
+.view{display:none;animation:fade .25s ease}
+.view.active{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}}
+.gauge{position:relative;width:min(300px,78vw);aspect-ratio:1;margin:14px auto 6px}
+.gauge svg{width:100%;height:100%;transform:rotate(135deg)}
+.gauge .center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.wval{font-size:64px;font-weight:800;letter-spacing:-.04em;line-height:1;font-variant-numeric:tabular-nums}
+.wunit{font-size:16px;color:var(--muted);font-weight:600;margin-top:4px}
+.wstate{margin-top:14px;font-size:13px;font-weight:600;padding:6px 12px;border-radius:999px;background:var(--panel2);color:var(--muted)}
+.wstate.final{background:rgba(62,230,181,.14);color:var(--accent)}
+.wstate.live{background:rgba(255,181,71,.14);color:var(--warn)}
+.actions{display:flex;gap:10px;margin:16px 0 8px}
+.btn{flex:1;padding:15px;border-radius:14px;font-weight:700;font-size:15px;background:var(--panel2);border:1px solid var(--line);transition:transform .1s}
+.btn:active{transform:scale(.98)}
+.btn.primary{background:linear-gradient(135deg,var(--accent),#2bc9e8);color:#04140f;border:0}
+.btn:disabled{opacity:.4;pointer-events:none}
+.note{font-size:13px;color:var(--muted);line-height:1.5;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:10px 0}
+.note b{color:var(--text)}
+.note.warn{border-color:rgba(255,181,71,.35);background:rgba(255,181,71,.06)}
+h2{font-size:14px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700;margin:22px 0 12px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 14px 12px;position:relative;overflow:hidden}
+.card .k{font-size:12.5px;color:var(--muted);font-weight:600}
+.card .v{font-size:24px;font-weight:800;letter-spacing:-.02em;margin-top:6px;font-variant-numeric:tabular-nums}
+.card .v small{font-size:13px;color:var(--muted);font-weight:600;margin-left:3px}
+.tag{display:inline-block;margin-top:6px;font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;background:var(--panel2);color:var(--muted)}
+.tag.ok{background:rgba(62,230,181,.13);color:var(--accent)}
+.tag.hi{background:rgba(255,107,122,.13);color:var(--bad)}
+.tag.mid{background:rgba(255,181,71,.13);color:var(--warn)}
+.tag.lo{background:rgba(124,196,255,.13);color:var(--low)}
+.bar{height:4px;border-radius:4px;background:var(--panel2);margin-top:10px;overflow:hidden}
+.bar span{display:block;height:100%;border-radius:4px;background:var(--accent);transition:width .6s}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:13px;color:var(--muted);font-weight:600;margin-bottom:6px}
+.seg{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:4px}
+.seg button{flex:1;padding:10px;border-radius:9px;font-weight:700;color:var(--muted)}
+.seg button.on{background:var(--panel);color:var(--text);box-shadow:0 1px 0 var(--line)}
+.row{display:flex;gap:10px}.row>*{flex:1}
+.hist{display:flex;flex-direction:column;gap:8px}
+.hitem{display:flex;align-items:center;justify-content:space-between;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.hitem .d{font-size:12.5px;color:var(--muted)}
+.hitem .w{font-weight:800;font-size:18px}
+.hitem .m{font-size:12.5px;color:var(--muted);text-align:right}
+.hitem .x{color:var(--muted);padding:6px 8px;margin-left:6px;font-size:18px}
+.chart{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px}
+.chart svg{width:100%;height:180px;display:block}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--muted);margin-top:6px}
+.legend span:before{content:"";display:inline-block;width:10px;height:3px;border-radius:2px;margin-right:6px;vertical-align:middle;background:var(--c)}
+.log{font-family:"JetBrains Mono",monospace;font-size:11.5px;background:#070a0e;border:1px solid var(--line);border-radius:14px;padding:10px;height:220px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:#9fb2c6;line-height:1.55}
+.log .src{color:var(--accent2)}
+.empty{text-align:center;color:var(--muted);padding:30px 10px;font-size:14px}
+nav{position:fixed;left:0;right:0;bottom:0;background:rgba(11,15,20,.92);backdrop-filter:blur(14px);border-top:1px solid var(--line);padding:8px 0 calc(8px + env(safe-area-inset-bottom))}
+nav .wrap{display:flex;justify-content:space-around}
+nav button{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10.5px;font-weight:700;color:var(--muted);padding:6px 4px;border-radius:10px;flex:1}
+nav button.on{color:var(--accent)}
+nav svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%) translateY(20px);background:var(--text);color:var(--bg);font-weight:700;font-size:14px;padding:10px 16px;border-radius:12px;opacity:0;transition:.25s;pointer-events:none;z-index:9}
+.toast.show{opacity:1;transform:translateX(-50%)}
+.small{font-size:12px;color:var(--muted)}
+.chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:10px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:0 0 auto;padding:8px 14px;border-radius:999px;background:var(--panel);border:1px solid var(--line);font-weight:700;font-size:13px;color:var(--muted)}
+.chip.on{background:var(--text);color:var(--bg);border-color:var(--text)}
+.chip:disabled{opacity:.35}
+.bodyv{display:flex;gap:16px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px}
+.bodyv svg.body{width:112px;flex:0 0 112px;height:auto;overflow:visible}
+.bodyv .bt{flex:1;min-width:0}
+.bodyv .bl{font-size:12.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+.bodyv .bv{font-size:38px;font-weight:800;letter-spacing:-.03em;line-height:1.1;margin-top:2px;font-variant-numeric:tabular-nums}
+.bodyv .bv small{font-size:15px;color:var(--muted);margin-left:2px}
+.bodyv .bs{font-size:13px;color:var(--muted);margin-top:2px}
+.bodyv .bi{font-size:12.5px;color:var(--muted);line-height:1.5;margin-top:10px}
+.bodyv .bi b{color:var(--text)}
+.lvl{transition:transform 1.2s cubic-bezier(.2,.8,.2,1)}
+.wave{animation:wave 2.2s linear infinite}
+@keyframes wave{to{transform:translateX(-25px)}}
+.cstat{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted);margin-top:8px}
+.cstat b{color:var(--text);font-size:14px}
+.hitem{cursor:pointer}
+.goal+.goal{margin-top:14px}
+.goal .gh{display:flex;justify-content:space-between;gap:8px;font-size:13px;color:var(--muted)}
+.goal .gh b{color:var(--text)}
+.goal .gs{font-size:11.5px;color:var(--muted);margin-top:6px}
+.goal .bar{height:8px;margin-top:8px}
+.acard{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin-bottom:10px}
+.acard .k{font-size:12.5px;color:var(--muted);font-weight:600}
+.acard .t{font-size:22px;font-weight:800;margin-top:4px}
+.acard .s{font-size:13px;color:var(--muted);line-height:1.5;margin-top:4px}
+.tg{display:grid;grid-template-columns:16px 1fr;gap:6px;margin-top:12px}
+.tg .ya{writing-mode:vertical-rl;transform:rotate(180deg);font-size:10.5px;color:var(--muted);text-align:center;font-weight:600}
+.tgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.tgrid div{font-size:10.5px;text-align:center;padding:9px 2px;border-radius:8px;background:var(--panel2);color:var(--muted);font-weight:700}
+.tgrid div.on{background:var(--accent);color:#04140f}
+.tg .xa{grid-column:2;font-size:10.5px;color:var(--muted);text-align:center;font-weight:600}
+.range{position:relative;height:10px;border-radius:6px;background:linear-gradient(90deg,var(--low) 0 20%,var(--accent) 20% 70%,var(--warn) 70% 85%,var(--bad) 85%);margin:12px 0 4px}
+.range i{position:absolute;top:-4px;width:4px;height:18px;border-radius:2px;background:var(--text);transform:translateX(-2px);box-shadow:0 0 0 2px var(--bg)}
+.rl{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
+.sumtxt{font-size:14.5px;line-height:1.55}
+.sumtxt b{font-weight:800}
+.sheet{position:fixed;inset:0;z-index:20;display:none}
+.sheet.open{display:block}
+.sheet-bg{position:absolute;inset:0;background:rgba(0,0,0,.6)}
+.sheet-card{position:absolute;left:0;right:0;bottom:0;max-width:560px;margin:0 auto;max-height:92vh;overflow:auto;background:var(--bg);border:1px solid var(--line);border-bottom:0;border-radius:22px 22px 0 0;padding:8px 18px calc(28px + env(safe-area-inset-bottom));animation:up .25s ease}
+.sheet-grip{width:40px;height:4px;border-radius:4px;background:var(--line);margin:4px auto 6px}
+@keyframes up{from{transform:translateY(40px);opacity:0}}
+.cmp{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;margin-top:8px}
+.cmp .hd{font-size:12.5px;color:var(--muted);font-weight:600;margin-bottom:10px}
+.cmp .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(70px,1fr));gap:8px}
+.cmp .c{text-align:center}
+.cmp .c .k{font-size:11.5px;color:var(--muted);font-weight:600}
+.cmp .c .d{font-size:18px;font-weight:800;margin-top:2px;font-variant-numeric:tabular-nums}
+.cmp .c .p{font-size:11px;color:var(--muted);margin-top:1px}
+.d.good{color:var(--accent)} .d.bad{color:var(--warn)} .d.eq{color:var(--muted)}
+.mono{font-family:"JetBrains Mono",monospace}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand"><i></i>Bio Balança</div>
+    <div class="pill" id="pill"><span class="dot"></span><span id="pillTxt">Desconectado</span></div>
+  </header>
+
+  <!-- MEDIR -->
+  <section class="view active" id="v-medir">
+    <div id="remind"></div>
+    <div class="gauge">
+      <svg viewBox="0 0 200 200">
+        <defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#3ee6b5"/><stop offset="1" stop-color="#4aa8ff"/></linearGradient></defs>
+        <circle cx="100" cy="100" r="86" fill="none" stroke="#18202b" stroke-width="12" stroke-linecap="round" stroke-dasharray="405 541"/>
+        <circle id="arc" cx="100" cy="100" r="86" fill="none" stroke="url(#g)" stroke-width="12" stroke-linecap="round" stroke-dasharray="0 541" style="transition:stroke-dasharray .5s ease"/>
+      </svg>
+      <div class="center">
+        <div class="wval" id="wval">--.-</div>
+        <div class="wunit">kg</div>
+        <div class="wstate" id="wstate">Conecte a balança</div>
+      </div>
+    </div>
+
+    <div id="cmp"></div>
+    <div id="goals"></div>
+    <div id="watchMain"></div>
+    <div class="actions">
+      <button class="btn primary" id="btnRead">Ler balança</button>
+      <button class="btn" id="btnSave" disabled>Salvar</button>
+    </div>
+    <div id="bleNote"></div>
+
+    <h2>Seu corpo</h2>
+    <div id="bodyMain"></div>
+    <h2>Análise</h2>
+    <div id="analysis"></div>
+    <h2>Composição corporal</h2>
+    <div class="grid" id="metrics"></div>
+    <p class="small" style="margin-top:12px;line-height:1.5">Os valores de composição são estimativas calculadas a partir do peso, da impedância e do seu perfil (fórmulas do app OKOK nas balanças OKOK; equação BIA de Sun et al., 2003 nas demais). Não substituem avaliação médica.</p>
+  </section>
+
+  <!-- HISTÓRICO -->
+  <section class="view" id="v-hist">
+    <h2>Resumo</h2>
+    <div class="chips" id="sumChips"></div>
+    <div id="summary"></div>
+    <h2>Evolução</h2>
+    <div class="chips" id="chartChips"></div>
+    <div class="chart"><svg id="chart" viewBox="0 0 320 180" preserveAspectRatio="none"></svg>
+      <div class="cstat" id="chartStat"></div>
+      <div class="legend" id="chartLegend" style="margin-top:8px"></div>
+    </div>
+    <h2>Medições</h2>
+    <p class="small" style="margin:-4px 0 10px">Toque numa medição para ver a composição completa.</p>
+    <div class="hist" id="hist"></div>
+  </section>
+
+  <!-- CONEXÕES -->
+  <section class="view" id="v-con">
+    <h2>Balança</h2>
+    <div class="acard" id="scaleCard"></div>
+    <div class="actions" style="margin-top:0">
+      <button class="btn primary" id="btnScan">Buscar por sinal</button>
+      <button class="btn" id="btnConnect">Parear</button>
+    </div>
+    <button class="btn" id="btnForget" style="width:100%">Esquecer balança</button>
+    <div id="conNote"></div>
+    <div id="scanBox" style="display:none">
+      <h2>Aparelhos próximos</h2>
+      <div class="note">Encoste o celular na balança e <b>suba nela</b>. A balança é a que tem o <b>sinal mais forte</b> e o selo <b>dados mudando</b>. Toque em <b>É esta</b>.</div>
+      <div class="hist" id="scanList"></div>
+      <button class="btn" id="btnStopScan" style="width:100%;margin-top:10px">Parar busca</button>
+    </div>
+    <p class="small" style="margin-top:10px;line-height:1.5"><b>Buscar por sinal</b> serve para balanças que só transmitem o peso (como as OKOK). <b>Parear</b> serve para balanças que aceitam conexão Bluetooth direta.</p>
+
+    <h2>Relógio</h2>
+    <div class="acard" id="watchCard">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <div class="t" style="font-size:18px;margin:0">⌚ Samsung Galaxy Watch</div>
+        <span class="tag ok" id="watchTag" style="margin:0">Importação</span>
+      </div>
+      <div class="s">O relógio mede a bioimpedância de verdade. Traga as medições dele para o histórico: gordura, massa magra, músculo esquelético, água e metabolismo medidos, junto com o peso da balança.</div>
+      <div id="watchStatus" class="s" style="margin-top:8px"></div>
+      <div id="watchNative"></div>
+    </div>
+    <label class="btn primary" style="display:block;text-align:center;width:100%">⌚ Importar do Samsung Health<input type="file" id="fileWatch" accept=".csv,.json,text/csv,application/json" multiple hidden></label>
+    <div class="note" style="line-height:1.6">
+      <b>1. Meça no relógio:</b> abra o Samsung Health no relógio → <b>Composição corporal</b> → <b>Medir</b>, com o dedo médio e o anelar nas duas teclas, em jejum e com os braços afastados do corpo.<br>
+      <b>2. Exporte no celular:</b> no app Samsung Health, abra o menu → <b>Configurações</b> → <b>Baixar dados pessoais</b>. Os arquivos vão para a pasta <b>Downloads → Samsung Health</b>.<br>
+      <b>3. Importe aqui:</b> toque no botão acima e escolha o arquivo que começa com <span class="mono">com.samsung.health.weight</span> (ou <span class="mono">body_composition</span>), em .csv ou .json.
+    </div>
+    <p class="small" style="line-height:1.5">No app Android do Bio Balança as medições chegam sozinhas pelo Health Connect. A importação do arquivo continua disponível como alternativa, por exemplo na versão web.</p>
+
+    <h2>Outras integrações</h2>
+    <div class="acard">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><div class="t" style="font-size:16px;margin:0">Enviar para o Health Connect</div><span class="tag" style="margin:0">Planejado</span></div>
+      <div class="s">Gravar o peso da balança no Health Connect, para aparecer também no Samsung Health e em outros apps de saúde.</div>
+    </div>
+  </section>
+
+  <!-- PERFIL -->
+  <section class="view" id="v-perfil">
+    <h2>Seu perfil</h2>
+    <div class="field"><label>Sexo biológico</label>
+      <div class="seg" id="segSex"><button data-v="m">Masculino</button><button data-v="f">Feminino</button></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Idade</label><input id="pAge" type="number" inputmode="numeric" min="10" max="100"></div>
+      <div class="field"><label>Altura (cm)</label><input id="pHeight" type="number" inputmode="numeric" min="100" max="230"></div>
+    </div>
+    <div class="note">O perfil é usado para calcular gordura, músculo, água e taxa metabólica. Fica salvo apenas neste navegador.</div>
+
+    <h2>Metas</h2>
+    <div class="row">
+      <div class="field"><label>Peso alvo (kg)</label><input id="gW" type="number" step="0.1" inputmode="decimal" placeholder="ex.: 75"></div>
+      <div class="field"><label>Gordura alvo (%)</label><input id="gFat" type="number" step="0.5" inputmode="decimal" placeholder="ex.: 20"></div>
+    </div>
+    <p class="small">O progresso conta a partir da sua última medição no momento em que você define a meta. Apague o valor para remover a meta.</p>
+
+    <h2>Medição</h2>
+    <div class="field"><label>Salvar automaticamente quando o peso final chegar</label>
+      <div class="seg" id="segAuto"><button data-v="1">Sim</button><button data-v="0">Não</button></div>
+    </div>
+
+    <h2>Lembrete de pesagem</h2>
+    <div class="row">
+      <div class="field"><label>Frequência</label><select id="remFreq"><option value="off">Desligado</option><option value="daily">Todo dia</option><option value="weekly">Toda semana</option></select></div>
+      <div class="field" id="remDayF"><label>Dia</label><select id="remDay"><option value="1">Segunda</option><option value="2">Terça</option><option value="3">Quarta</option><option value="4">Quinta</option><option value="5">Sexta</option><option value="6">Sábado</option><option value="0">Domingo</option></select></div>
+    </div>
+    <div class="field"><label>Horário</label><input id="remTime" type="time"></div>
+    <button class="btn" id="btnIcs" style="width:100%">📅 Adicionar lembrete à agenda</button>
+    <div class="note">Cria um evento repetido na agenda do celular, com alarme. O app também avisa na tela inicial quando a pesagem estiver atrasada. Dica: pese-se sempre no mesmo horário, em jejum, depois de ir ao banheiro e descalço.</div>
+  </section>
+
+  <!-- AVANÇADO -->
+  <section class="view" id="v-av">
+    <h2>Backup</h2>
+    <div class="note">Seus dados ficam só neste navegador. Exporte um backup de vez em quando; ele também serve para levar o histórico para outro celular.</div>
+    <div class="actions" style="margin-top:0">
+      <button class="btn" id="btnExport">Exportar backup</button>
+      <label class="btn" style="text-align:center">Importar backup<input type="file" id="fileImport" accept=".json,application/json" hidden></label>
+    </div>
+    <button class="btn" id="btnCsv" style="width:100%">Exportar planilha (.csv)</button>
+
+    <h2>Pacotes recebidos</h2>
+    <div class="log" id="log"></div>
+    <div class="actions"><button class="btn" id="btnClear">Limpar</button><button class="btn" id="btnCopy">Copiar log</button></div>
+
+    <h2>Calibrar decodificação</h2>
+    <div class="note">Balanças da linha OKOK/Chipsea usam formatos próprios. Suba na balança, espere o número ficar parado no display e digite-o aqui: o app descobre sozinho onde o peso está no pacote.</div>
+    <div class="row">
+      <input id="calW" type="number" step="0.05" inputmode="decimal" placeholder="Peso no display (kg)">
+      <button class="btn primary" id="btnCal" style="flex:0 0 auto;padding:0 18px">Calibrar</button>
+    </div>
+    <p class="small mono" id="calInfo" style="margin-top:10px"></p>
+
+    <h2>Impedância (manual)</h2>
+    <div class="note">Se a sua balança envia impedância num pacote proprietário, informe a posição (byte), a ordem e o divisor. Olhe o log: geralmente é um valor entre 300 e 900 Ω que aparece no pacote final.</div>
+    <div class="row">
+      <div class="field"><label>Byte inicial</label><input id="impOff" type="number" min="-1" placeholder="-1 = off"></div>
+      <div class="field"><label>Ordem</label><select id="impEnd"><option value="be">Big-endian</option><option value="le">Little-endian</option></select></div>
+      <div class="field"><label>Divisor</label><select id="impDiv"><option>1</option><option>10</option></select></div>
+    </div>
+    <div class="actions"><button class="btn" id="btnResetDec">Restaurar automático</button><button class="btn" id="btnDemo">Modo demonstração</button></div>
+  </section>
+</div>
+
+<nav><div class="wrap">
+  <button class="on" data-view="v-medir"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5"/><path d="M8 9a5 5 0 0 1 8 0l-3 3"/></svg>Medir</button>
+  <button data-view="v-hist"><svg viewBox="0 0 24 24"><path d="M3 20h18M6 16l4-5 3 3 5-7"/></svg>Histórico</button>
+  <button data-view="v-con"><svg viewBox="0 0 24 24"><path d="M7 7l10 10-5 5V2l5 5L7 17"/></svg>Conexões</button>
+  <button data-view="v-perfil"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>Perfil</button>
+  <button data-view="v-av"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>Avançado</button>
+</div></nav>
+<div class="toast" id="toast"></div>
+<div class="sheet" id="sheet"><div class="sheet-bg" id="sheetBg"></div><div class="sheet-card"><div class="sheet-grip"></div><div id="sheetBody"></div></div></div>
+
+<script>
+/* ---------- storage seguro ---------- */
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem('bb.'+k); return v ? JSON.parse(v) : d }catch(e){ return d } },
+  set(k, v){ try{ localStorage.setItem('bb.'+k, JSON.stringify(v)) }catch(e){} }
+};
+const $ = s => document.querySelector(s);
+const toast = msg => { const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),2200) };
+
+/* ---------- app Android (Capacitor) ---------- */
+const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+const BLE = NATIVE && window.Capacitor.Plugins ? window.Capacitor.Plugins.BluetoothLe : null;
+const HB  = NATIVE && window.Capacitor.Plugins ? window.Capacitor.Plugins.HealthBridge : null;
+
+/* ---------- estado ---------- */
+let profile = Object.assign({sex:'m', age:30, height:175, autoSave:true, remFreq:'off', remDay:1, remTime:'07:00'}, store.get('profile', {}));
+const DAY = 86400000;
+let history = store.get('history', []);
+let decoder = store.get('decoder', null);       // {off, end, div} para peso
+let impCfg  = store.get('imp', {off:-1, end:'be', div:1});
+let cur = {weight:null, impedance:null, final:false, extra:{}};
+let lastPacket = null, recentW = [], device = null, demoTimer = null;
+
+/* ---------- navegação ---------- */
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===b.dataset.view));
+  if(b.dataset.view==='v-hist') renderHistory();
+  window.scrollTo({top:0});
+});
+
+/* ---------- perfil ---------- */
+function renderProfile(){
+  document.querySelectorAll('#segSex button').forEach(b=>b.classList.toggle('on',b.dataset.v===profile.sex));
+  $('#pAge').value = profile.age; $('#pHeight').value = profile.height;
+  $('#gW').value = profile.goalW ?? ''; $('#gFat').value = profile.goalFat ?? '';
+  document.querySelectorAll('#segAuto button').forEach(b=>b.classList.toggle('on', (b.dataset.v==='1')===!!profile.autoSave));
+  $('#remFreq').value = profile.remFreq; $('#remDay').value = String(profile.remDay); $('#remTime').value = profile.remTime;
+  $('#remDayF').style.display = profile.remFreq==='weekly' ? '' : 'none';
+}
+document.querySelectorAll('#segSex button').forEach(b=>b.onclick=()=>{profile.sex=b.dataset.v;saveProfile()});
+$('#pAge').oninput = e=>{profile.age=+e.target.value||profile.age;saveProfile()};
+$('#pHeight').oninput = e=>{profile.height=+e.target.value||profile.height;saveProfile()};
+function saveProfile(){ store.set('profile',profile); renderProfile(); renderMetrics(); renderCompare(); renderGoals(); renderRemind() }
+function latestState(){
+  if(cur.weight && cur.final) return {w:cur.weight, c:fullComp(cur.weight, cur.impedance, profile, cur.algo)};
+  const h = history[0]; return h ? {w:h.w, c:entryComp(h), t:h.t} : null;
+}
+const num = v=>{ const n = parseFloat(String(v).replace(',','.')); return n>0 ? n : null };
+$('#gW').onchange = e=>{ profile.goalW = num(e.target.value); const s=latestState(); profile.goalStartW = s ? s.w : null; saveProfile() };
+$('#gFat').onchange = e=>{ profile.goalFat = num(e.target.value); const s=latestState(); profile.goalStartFat = s && s.c ? (s.c.fat ?? null) : null; saveProfile() };
+document.querySelectorAll('#segAuto button').forEach(b=>b.onclick=()=>{ profile.autoSave = b.dataset.v==='1'; saveProfile() });
+$('#remFreq').onchange = e=>{ profile.remFreq = e.target.value; saveProfile() };
+$('#remDay').onchange = e=>{ profile.remDay = +e.target.value; saveProfile() };
+$('#remTime').onchange = e=>{ profile.remTime = e.target.value || '07:00'; saveProfile() };
+
+/* ---------- arquivos (download) ---------- */
+function download(name, text, type){
+  try{
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], {type}));
+    a.download = name; document.body.appendChild(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove() }, 1500);
+  }catch(e){ toast('Não foi possível gerar o arquivo') }
+}
+
+/* ---------- lembrete ---------- */
+$('#btnIcs').onclick = ()=>{
+  const freq = profile.remFreq==='off' ? 'daily' : profile.remFreq;
+  const [hh,mm] = (profile.remTime||'07:00').split(':').map(Number);
+  const start = new Date(); start.setHours(hh, mm, 0, 0);
+  if(freq==='weekly'){ while(start.getDay()!==profile.remDay || start<new Date()) start.setDate(start.getDate()+1) }
+  else if(start<new Date()) start.setDate(start.getDate()+1);
+  const end = new Date(start.getTime()+5*60000), pad = n=>String(n).padStart(2,'0');
+  const loc = d=>`${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+  const utc = new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d+/,'');
+  const rr = freq==='weekly' ? `RRULE:FREQ=WEEKLY;BYDAY=${['SU','MO','TU','WE','TH','FR','SA'][profile.remDay]}` : 'RRULE:FREQ=DAILY';
+  const ics = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Bio Balanca//PT-BR','CALSCALE:GREGORIAN','BEGIN:VEVENT',
+    'UID:lembrete-pesagem@bio-balanca','DTSTAMP:'+utc,'DTSTART:'+loc(start),'DTEND:'+loc(end),rr,
+    'SUMMARY:⚖️ Pesagem (Bio Balança)',
+    'DESCRIPTION:Em jejum\\, depois de ir ao banheiro e descalço. Abra o Bio Balança e suba na balança.',
+    'BEGIN:VALARM','TRIGGER:PT0M','ACTION:DISPLAY','DESCRIPTION:Hora de se pesar','END:VALARM','END:VEVENT','END:VCALENDAR'].join('\r\n');
+  download('lembrete-pesagem.ics', ics, 'text/calendar');
+  if(profile.remFreq==='off'){ profile.remFreq='daily'; saveProfile() }
+};
+function renderRemind(){
+  const el = $('#remind'), h = history[0];
+  if(!h || cur.weight){ el.innerHTML=''; return }
+  const day = t=>new Date(t).setHours(0,0,0,0);
+  const gap = Math.round((day(Date.now()) - day(h.t))/DAY);
+  const limit = profile.remFreq==='daily' ? 1 : profile.remFreq==='weekly' ? 7 : 14;
+  if(gap < limit){ el.innerHTML=''; return }
+  el.innerHTML = `<div class="note warn" style="margin-top:4px">⏰ <b>Hora de se pesar.</b> Sua última pesagem foi ${gap===1?'ontem':`há ${gap} dias`}.</div>`;
+}
+
+/* ---------- Samsung Health (Galaxy Watch) ---------- */
+function parseCSVLine(line){
+  const out=[]; let cur='', q=false;
+  for(let i=0;i<line.length;i++){ const ch=line[i];
+    if(q){ if(ch==='"'){ if(line[i+1]==='"'){cur+='"';i++} else q=false } else cur+=ch }
+    else if(ch==='"') q=true; else if(ch===','){ out.push(cur); cur='' } else cur+=ch;
+  }
+  out.push(cur); return out;
+}
+function shTime(v, off){
+  if(v==null || v==='') return null;
+  if(/^\d{12,}$/.test(String(v))) return +v;                       // milissegundos
+  const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
+  if(!m) return null;
+  return Date.UTC(+m[1], m[2]-1, +m[3], +m[4], +m[5], +(m[6]||0)); // Samsung grava start_time em UTC
+}
+function shRecords(text, name){
+  const recs = [];
+  const t = text.replace(/^﻿/,'').trim();
+  if(t.startsWith('[') || t.startsWith('{')){
+    let data = JSON.parse(t); if(!Array.isArray(data)) data = data.data || data.records || [data];
+    data.forEach(o=>{ const r={}; Object.keys(o).forEach(k=>r[k.split('.').pop().toLowerCase()] = o[k]); recs.push(r) });
+    return recs;
+  }
+  const lines = t.split(/\r?\n/);
+  const hi = lines.findIndex(l=>/start_time|create_time/i.test(l) && /weight|body_fat/i.test(l));
+  if(hi<0) return recs;
+  const head = parseCSVLine(lines[hi]).map(h=>h.trim().split('.').pop().toLowerCase());
+  for(let i=hi+1;i<lines.length;i++){
+    if(!lines[i].trim()) continue;
+    const cols = parseCSVLine(lines[i]), r = {};
+    head.forEach((h,k)=>{ if(h && r[h]==null) r[h] = cols[k] });
+    recs.push(r);
+  }
+  return recs;
+}
+function shToEntry(r){
+  const n = k=>{ const v = parseFloat(String(r[k]??'').replace(',','.')); return isFinite(v) && v>0 ? v : null };
+  const t = shTime(r.start_time ?? r.create_time, r.time_offset);
+  const fat = n('body_fat'), fatKg = n('body_fat_mass'), skeletal = n('skeletal_muscle_mass'), waterL = n('total_body_water');
+  if(!t || (fat==null && fatKg==null && skeletal==null)) return null;   // só medições de composição
+  let w = n('weight');
+  if(!w){ const prev = history.find(h=>h.t<=t) || history[history.length-1]; w = prev ? prev.w : null }
+  if(!w) return null;
+  const h = n('height');
+  return {t, w:+w.toFixed(2), src:'watch', r:null,
+    m:{fat, fatKg, ffm:n('fat_free_mass'), skeletal, waterL, bmr:n('basal_metabolic_rate')},
+    p:{...profile, ...(h ? {height:Math.round(h)} : {})}};
+}
+$('#fileWatch').onchange = async e=>{
+  const files = [...e.target.files]; e.target.value=''; if(!files.length) return;
+  let added = 0, found = 0, bad = 0;
+  for(const f of files){
+    try{
+      shRecords(await f.text(), f.name).forEach(r=>{
+        const en = shToEntry(r); if(!en) return; found++;
+        if(history.some(h=>Math.abs(h.t-en.t)<60000 && h.src==='watch')) return;
+        history.push(en); added++;
+      });
+    }catch(err){ bad++ }
+  }
+  history.sort((a,b)=>b.t-a.t); store.set('history', history);
+  renderWatch(); renderCompare(); renderGoals(); renderRemind(); renderMetrics();
+  if(added) toast(`${added} medições do relógio importadas`);
+  else if(found) toast('Essas medições do relógio já estavam no histórico');
+  else toast(bad ? 'Não consegui ler esse arquivo' : 'Nenhuma medição de composição corporal no arquivo');
+};
+/* Health Connect (app Android): sincronização automática */
+let hcState = null, hcBusy = false;
+async function hcRefresh(){
+  if(!HB) return null;
+  try{ hcState = await HB.status() }catch(e){ hcState = {available:false} }
+  renderHC(); return hcState;
+}
+function renderHC(){
+  const el = $('#watchNative'); if(!el) return;
+  if(!NATIVE){
+    el.innerHTML = '<div class="s" style="margin-top:8px">📲 No app Android do Bio Balança as medições do relógio chegam sozinhas, pelo Health Connect.</div>';
+    return;
+  }
+  const st = hcState || {}, last = store.get('hcLast', null);
+  $('#watchTag').textContent = st.grantedAny ? 'Automático' : 'Configurar';
+  if(!hcState) el.innerHTML = '<div class="s" style="margin-top:8px">Verificando o Health Connect…</div>';
+  else if(!st.available) el.innerHTML = `<div class="s" style="margin-top:8px">${st.needsUpdate ? 'O Health Connect precisa ser atualizado.' : 'O Health Connect não está instalado neste celular.'}</div>
+    <button class="btn" id="hcOpen" style="width:100%;margin-top:10px">${st.needsUpdate ? 'Atualizar' : 'Instalar'} o Health Connect</button>`;
+  else if(!st.grantedAny) el.innerHTML = `<div class="s" style="margin-top:8px">Permita que o Bio Balança leia as medições do relógio. Depois disso elas chegam sozinhas sempre que você abrir o app.</div>
+    <button class="btn primary" id="hcAuth" style="width:100%;margin-top:10px">Conectar ao Health Connect</button>`;
+  else el.innerHTML = `<div class="s" style="margin-top:8px">✅ <b style="color:var(--text)">Sincronização automática ligada.</b>${last ? ' Última verificação: '+new Date(last).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})+'.' : ''}</div>
+    <div class="actions" style="margin:10px 0 0"><button class="btn primary" id="hcSync">Sincronizar agora</button><button class="btn" id="hcOpen">Abrir Health Connect</button></div>`;
+  const o = $('#hcOpen'); if(o) o.onclick = ()=>HB.openSettings().catch(()=>toast('Não foi possível abrir o Health Connect'));
+  const a = $('#hcAuth'); if(a) a.onclick = async ()=>{
+    try{ hcState = await HB.authorize() }catch(e){ toast('Não foi possível pedir a permissão') }
+    renderHC();
+    if(hcState && hcState.grantedAny) syncHealth(true); else toast('Permissão não concedida');
+  };
+  const sy = $('#hcSync'); if(sy) sy.onclick = ()=>syncHealth(true);
+}
+async function syncHealth(manual){
+  if(!HB || hcBusy) return; hcBusy = true;
+  try{
+    const st = await hcRefresh();
+    if(!st || !st.available || !st.grantedAny){ if(manual) toast('Conecte o Health Connect primeiro'); return }
+    const last = store.get('hcLast', 0);
+    const res = await HB.read({since: last ? last - 3*DAY : Date.now() - 400*DAY});
+    const added = mergeHealth(res.records || []);
+    store.set('hcLast', Date.now());
+    if(added){ toast(`${added} ${added===1 ? 'medição nova' : 'medições novas'} do relógio`); afterHistoryChange() }
+    else if(manual) toast('Nenhuma medição nova do relógio');
+    renderHC();
+  }catch(e){
+    logText('health connect: '+(e.message||e));
+    if(manual) toast('Erro ao ler o Health Connect');
+  }finally{ hcBusy = false }
+}
+function mergeHealth(recs){
+  const of = t=>recs.filter(r=>r.type===t);
+  const near = (list, t, win=3*60000)=>{ let best=null; list.forEach(r=>{ const d=Math.abs(r.t-t); if(d<=win && (!best || d<Math.abs(best.t-t))) best=r }); return best };
+  const weights = of('weight').sort((a,b)=>a.t-b.t), heights = of('height').sort((a,b)=>a.t-b.t);
+  let added = 0;
+  of('fat').forEach(f=>{
+    if(history.some(h=>h.src==='watch' && Math.abs(h.t-f.t)<2*60000)) return;      // já existe (também evita duplicar com a importação manual)
+    let w = (near(weights, f.t) || [...weights].reverse().find(r=>r.t<=f.t) || {}).v;
+    if(!w){ const ph = history.find(h=>h.t<=f.t) || history[history.length-1]; w = ph ? ph.w : null }
+    if(!w) return;
+    const g = k=>{ const r = near(of(k), f.t); return r ? r.v : null };
+    const hgt = (near(heights, f.t, 365*DAY) || {}).v;
+    history.push({t:f.t, w:+w.toFixed(2), r:null, src:'watch', hc:f.src,
+      m:{fat:f.v, ffm:g('lean'), waterL:g('water'), bone:g('bone'), bmr:g('bmr')},
+      p:{...profile, ...(hgt ? {height:Math.round(hgt*100)} : {})}});
+    added++;
+  });
+  if(added){ history.sort((a,b)=>b.t-a.t); store.set('history', history) }
+  return added;
+}
+function afterHistoryChange(){
+  renderWatch(); renderCompare(); renderGoals(); renderRemind(); renderMetrics();
+  if($('#v-hist').classList.contains('active')) renderHistory();
+}
+function lastWatch(){ return history.find(h=>h.src==='watch') }
+function renderWatch(){
+  const el = $('#watchStatus'); if(!el) return;
+  const all = history.filter(h=>h.src==='watch'), last = all[0];
+  el.innerHTML = last
+    ? `<b style="color:var(--text)">${all.length} ${all.length===1?'medição importada':'medições importadas'}</b>. Última: ${new Date(last.t).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}.`
+    : 'Nenhuma medição importada ainda.';
+  // destaque da última medição do relógio na tela Medir
+  const card = $('#watchMain'); if(!card) return;
+  if(!last){ card.innerHTML=''; return }
+  const c = entryComp(last), f = v=>v.toFixed(1).replace('.',',');
+  const days = Math.round((Date.now()-last.t)/DAY);
+  card.innerHTML = `<div class="cmp" style="cursor:pointer" id="watchMainCard"><div class="hd" style="margin-bottom:6px">⌚ Bioimpedância real do relógio · ${days<=0?'hoje':days===1?'ontem':`há ${days} dias`}</div>
+    <div class="cols">${c.fat!=null?`<div class="c"><div class="k">Gordura</div><div class="d">${f(c.fat)}<small style="font-size:11px">%</small></div></div>`:''}
+    ${c.skeletal!=null?`<div class="c"><div class="k">Músc. esquelético</div><div class="d">${f(c.skeletal)}<small style="font-size:11px">kg</small></div></div>`:''}
+    ${c.water!=null?`<div class="c"><div class="k">Água</div><div class="d">${f(c.water)}<small style="font-size:11px">%</small></div></div>`:''}
+    ${c.bmr!=null?`<div class="c"><div class="k">Metabolismo</div><div class="d">${Math.round(c.bmr)}</div></div>`:''}</div></div>`;
+  $('#watchMainCard').onclick = ()=>openDetail(history.indexOf(last));
+}
+
+/* ---------- backup ---------- */
+$('#btnExport').onclick = ()=>{
+  const d = new Date().toISOString().slice(0,10);
+  download(`bio-balanca-backup-${d}.json`, JSON.stringify({app:'bio-balanca', v:1, exportedAt:Date.now(), profile, history}, null, 1), 'application/json');
+};
+$('#btnCsv').onclick = ()=>{
+  const n = (v,d=1)=> v==null || !isFinite(v) ? '' : v.toFixed(d).replace('.',',');
+  const rows = [['data','peso_kg','imc','gordura_pct','gordura_kg','massa_magra_kg','musculo_kg','agua_pct','proteina_pct','ossos_kg','gordura_visceral','metabolismo_kcal','impedancia_ohm'].join(';')];
+  [...history].reverse().forEach(h=>{ const c = entryComp(h);
+    rows.push([new Date(h.t).toLocaleString('pt-BR'), n(h.w,2), n(c.bmi), n(c.fat), n(c.fatKg), n(c.ffm), n(c.muscle), n(c.water), n(c.protein), n(c.bone), n(c.visceral,0), n(c.bmr,0), n(h.r,0)].join(';')) });
+  download(`bio-balanca-${new Date().toISOString().slice(0,10)}.csv`, '\ufeff'+rows.join('\r\n'), 'text/csv');
+};
+$('#fileImport').onchange = async e=>{
+  const f = e.target.files[0]; e.target.value=''; if(!f) return;
+  try{
+    const data = JSON.parse(await f.text());
+    const list = Array.isArray(data) ? data : data.history;
+    if(!Array.isArray(list)) throw new Error('formato');
+    const have = new Set(history.map(h=>h.t)); let added = 0;
+    list.forEach(h=>{ if(h && typeof h.t==='number' && typeof h.w==='number' && !have.has(h.t)){ history.push(h); have.add(h.t); added++ } });
+    history.sort((a,b)=>b.t-a.t); store.set('history', history);
+    if(data.profile && !store.get('profile', null)){ profile = Object.assign(profile, data.profile); saveProfile() }
+    renderCompare(); renderGoals(); renderRemind();
+    toast(added ? `${added} medições importadas` : 'Nenhuma medição nova no arquivo');
+  }catch(err){ toast('Arquivo de backup inválido') }
+};
+
+/* ---------- cálculo de composição ---------- */
+const clamp = (v,a,b)=>Math.min(b,Math.max(a,v));
+const roundHalf = v=>Math.floor(v) + (v-Math.floor(v)>=0.5?1:0);
+// Fórmulas do app OKOK (CsAlgoBuilder, balanças Chipsea de 4 eletrodos)
+function composeOkok(W, Z, p){
+  const H=p.height, A=p.age, m=p.sex==='m', S=m?1:0, adult=A>17, o={};
+  o.bmi = W/Math.pow(H/100,2);
+  const fatRaw = (m ? -0.3315*H + 0.6216*W + 0.0183*A + 0.0085*Z + 22.554
+                    : -0.3332*H + 0.7509*W + 0.0196*A + 0.0072*Z + 22.7193) / W * 100;
+  o.fat = clamp(fatRaw,5,45);
+  o.fatKg = o.fat*W/100; o.ffm = W - o.fatKg;
+  o.water = adult ? clamp((m ? 0.0939*H + 0.3758*W - 0.0032*A - 0.006925*Z + 0.097
+                             : 0.0877*H + 0.2973*W + 0.0128*A - 0.00603*Z + 0.5175)/W*100, 20, 85) : null;
+  o.muscle = fatRaw>45 ? W*0.55-4 : fatRaw<5 ? W*0.95-1
+           : clamp(m ? 0.2867*H + 0.3894*W - 0.0408*A - 0.01235*Z - 15.7665
+                     : 0.3186*H + 0.1934*W - 0.0206*A - 0.0132*Z - 16.4556, 20, 70);
+  o.musclePct = o.muscle/W*100;
+  o.skeletal = clamp(0.2573*H + 0.1745*W - 0.0161*A + 2.4269*S - 0.017*Z - 20.2165, 20, 70);
+  o.bone = clamp(W - o.fatKg - o.muscle, 1, 4);
+  o.visceral = adult ? clamp(roundHalf(m ? -0.2675*H + 0.42*W + 0.1462*A + 0.0123*Z + 13.9871
+                                         : -0.1651*H + 0.2628*W + 0.0649*A + 0.0024*Z + 12.3445), 1, 59) : null;
+  o.bmr = m ? 7.5037*H + 13.1523*W - 4.3376*A - 0.3486*Z - 311.7751
+            : 7.5432*H + 9.9474*W - 3.4382*A - 0.309*Z - 288.2821;
+  o.metaAge = adult ? clamp(Math.round(m ? -0.7471*H + 0.9161*W + 0.4184*A + 0.0517*Z + 54.2267
+                                         : -1.1165*H + 1.5784*W + 0.4615*A + 0.0415*Z + 83.2548),
+                            Math.max(18,A-10), Math.min(80,A+10)) : null;
+  o.protein = o.water!=null ? Math.max(0, o.musclePct - o.water) : null;
+  return o;
+}
+function compose(w, R, p, algo=cur.algo){
+  if(algo==='okok' && R) return composeOkok(w, R, p);
+  const H = p.height, A = p.age, male = p.sex==='m';
+  const out = {};
+  out.bmi = w / Math.pow(H/100,2);
+  if(R && R>150 && R<1500){
+    let ffm = male ? -10.68 + 0.65*H*H/R + 0.26*w + 0.02*R
+                   : -9.53  + 0.69*H*H/R + 0.17*w + 0.02*R;
+    ffm = Math.min(Math.max(ffm, w*0.4), w*0.97);
+    const fat = (w-ffm)/w*100;
+    const tbw = 0.73*ffm, bone = 0.055*ffm;
+    out.fat = fat; out.fatKg = w-ffm; out.ffm = ffm;
+    out.water = tbw/w*100;
+    out.muscle = ffm - bone;
+    out.bone = bone;
+    out.protein = Math.max(0,(ffm - tbw - bone)/w*100);
+    out.bmr = 370 + 21.6*ffm;               // Katch-McArdle
+  } else {
+    out.bmr = 10*w + 6.25*H - 5*A + (male?5:-161); // Mifflin-St Jeor
+  }
+  return out;
+}
+function ranges(key, p){
+  const male = p.sex==='m', old = p.age>=40;
+  return {
+    bmi:[18.5,25,30],
+    fat: male ? (old?[11,22,28]:[8,20,25]) : (old?[23,34,40]:[21,33,39]),
+    water: male?[50,65,99]:[45,60,99],
+    protein:[16,20,99],
+    visceral:[0,10,15]
+  }[key];
+}
+function rate(key, val, p){
+  const R = ranges(key, p);
+  if(!R || val==null) return null;
+  if(val<R[0]) return ['lo','Baixo'];
+  if(val<R[1]) return ['ok','Normal'];
+  if(val<R[2]) return ['mid','Alto'];
+  return ['hi','Muito alto'];
+}
+function fullComp(w, R, p, algo){
+  if(!w) return null;
+  const c = compose(w, R, p, algo); c.w = w;
+  if(c.muscle!=null && c.musclePct==null) c.musclePct = c.muscle/w*100;
+  return c;
+}
+function renderMetrics(){
+  const c = fullComp(cur.weight, cur.impedance, profile, cur.algo);
+  $('#metrics').innerHTML = metricsHTML(cur.weight, cur.impedance, cur.algo, cur.extra, profile);
+  renderBody('#bodyMain', cur.weight && cur.final ? c : null, profile, 'main', cur.weight ? 'Aguardando o peso final…' : 'Suba na balança para ver.');
+  renderAnalysis(cur.weight && cur.final ? c : null);
+}
+function metricsHTML(w, R, algo, ex, p, cIn){
+  const c = cIn || fullComp(w, R, p, algo) || {};
+  ex = ex || {};
+  const items = [
+    ['IMC','bmi', c.bmi, '', 1, 40],
+    ['Gordura corporal','fat', ex.fat ?? c.fat, '%', 1, 50],
+    ['Massa gorda', null, c.fatKg, 'kg', 1],
+    ['Massa magra', null, ex.ffm ?? c.ffm, 'kg', 1],
+    ['Massa muscular', null, ex.muscle ?? c.muscle, 'kg', 1],
+    ['Músculo esquelético', null, c.skeletal, 'kg', 1],
+    ['Água corporal','water', c.water, '%', 1, 80],
+    ['Proteína','protein', c.protein, '%', 1, 30],
+    ['Massa óssea', null, c.bone, 'kg', 1],
+    ['Gordura visceral','visceral', c.visceral, '', 0, 30],
+    ['Metabolismo basal', null, ex.bmr ?? c.bmr, 'kcal', 0],
+    ['Idade metabólica', null, c.metaAge, 'anos', 0],
+    ['Impedância', null, R, 'Ω', 0],
+  ].filter(it=>!(it[2]==null && ['Músculo esquelético','Gordura visceral','Idade metabólica'].includes(it[0])));
+  const okNote = c.src==='watch'
+    ? `<div class="note" style="grid-column:1/-1;border-color:rgba(62,230,181,.35)">⌚ <b>Medido pelo Galaxy Watch</b> (bioimpedância real). Massa óssea e proteína são estimadas a partir da massa magra.</div>`
+    : algo==='okok' && R===600
+    ? `<div class="note warn" style="grid-column:1/-1">Sua balança (OKOK, formato C0) envia sempre a mesma impedância, <b>600 Ω</b>: ela não mede a bioimpedância de verdade. Os valores abaixo usam as fórmulas do app OKOK e por isso dependem só do peso, altura, idade e sexo.</div>` : '';
+  return okNote + items.map(([k,key,v,u,d,max])=>{
+    const has = v!=null && isFinite(v);
+    const r = has && key ? rate(key,v,p) : null;
+    return `<div class="card"><div class="k">${k}</div>
+      <div class="v">${has? v.toFixed(d).replace('.',',') : '--'}<small>${u}</small></div>
+      ${r?`<span class="tag ${r[0]}">${r[1]}</span>`:''}
+      ${has&&max?`<div class="bar"><span style="width:${Math.min(100,v/max*100)}%;background:var(${r&&r[0]==='hi'?'--bad':r&&r[0]==='mid'?'--warn':r&&r[0]==='lo'?'--low':'--accent'})"></span></div>`:''}
+    </div>`;
+  }).join('');
+}
+
+/* ---------- análise ---------- */
+const TYPES = [ // [nível de gordura][nível de músculo]
+  [['Magro','Pouca gordura e pouca massa muscular. Treino de força e boa alimentação ajudam a ganhar massa.'],
+   ['Esguio','Pouca gordura e músculo dentro do normal.'],
+   ['Atlético','Pouca gordura e bastante massa muscular.']],
+  [['Pouco exercitado','Gordura no ideal, mas pouca massa muscular. Treino de força é o próximo passo.'],
+   ['Equilibrado','Gordura e músculo dentro do esperado para o seu perfil.'],
+   ['Musculoso','Gordura no ideal e bastante massa muscular.']],
+  [['Gordura oculta','Gordura acima do ideal com pouca massa muscular, mesmo que o peso pareça normal. Combine treino de força e alimentação.'],
+   ['Acima do peso','Gordura acima do ideal com músculo normal. O foco é reduzir gordura mantendo o músculo.'],
+   ['Robusto','Bastante músculo, mas também gordura acima do ideal.']],
+];
+function bodyType(c, p){
+  if(c.fat==null || c.ffm==null) return null;
+  const fr = rate('fat', c.fat, p)[0], fl = fr==='lo' ? 0 : fr==='ok' ? 1 : 2;
+  const ffmi = c.ffm/Math.pow(p.height/100,2), [a,b] = p.sex==='m' ? [17,20] : [14.5,17];
+  const ml = ffmi<a ? 0 : ffmi<=b ? 1 : 2;
+  return {fl, ml, ffmi, name:TYPES[fl][ml][0], desc:TYPES[fl][ml][1]};
+}
+function analysisHTML(c, p){
+  const f = v=>v.toFixed(1).replace('.',',');
+  const h2 = Math.pow(p.height/100,2), lo = 18.5*h2, hi = 24.9*h2, w = c.w;
+  const diff = w<lo ? lo-w : w>hi ? w-hi : 0;
+  const std = p.sex==='m' ? (p.height-80)*0.7 : (p.height-70)*0.6, obes = (w-std)/std*100;
+  const pos = clamp((c.bmi-15)/(35-15),0,1)*100;
+  let html = `<div class="acard"><div class="k">Peso ideal para ${p.height} cm</div>
+    <div class="t">${f(lo)} – ${f(hi)} kg</div>
+    <div class="s">${diff===0 ? 'Você está <b style="color:var(--accent)">dentro da faixa</b> de peso saudável.' : `Você está <b style="color:var(--warn)">${f(diff)} kg ${w>hi?'acima':'abaixo'}</b> da faixa saudável.`}</div>
+    <div class="range"><i style="left:${pos}%"></i></div>
+    <div class="rl"><span>IMC 15</span><span>18,5</span><span>25</span><span>30</span><span>35</span></div>
+    <div class="s" style="margin-top:8px">Peso de referência (fórmula OKOK): <b>${f(std)} kg</b> (${obes>=0?'+':''}${obes.toFixed(0)}%).</div></div>`;
+  const t = bodyType(c, p);
+  if(t){
+    const cells = [2,1,0].map(fl=>[0,1,2].map(ml=>`<div class="${fl===t.fl&&ml===t.ml?'on':''}">${TYPES[fl][ml][0]}</div>`).join('')).join('');
+    html += `<div class="acard"><div class="k">Tipo corporal</div><div class="t">${t.name}</div><div class="s">${t.desc}</div>
+      <div class="tg"><div class="ya">gordura →</div><div class="tgrid">${cells}</div><div class="xa">músculo →</div></div>
+      <div class="s" style="margin-top:8px;font-size:11.5px">Índice de massa magra: ${f(t.ffmi)} kg/m².</div></div>`;
+  }
+  return html;
+}
+function renderAnalysis(c){
+  $('#analysis').innerHTML = c ? analysisHTML(c, profile) : `<div class="note" style="margin:0">${cur.weight ? 'Aguardando o peso final…' : 'Aparece aqui depois da pesagem.'}</div>`;
+}
+
+/* ---------- metas ---------- */
+function goalBar(label, now, start, goal, unit, verb){
+  if(goal==null || now==null) return '';
+  const f = v=>v.toFixed(1).replace('.',',');
+  const s0 = start ?? now, dir = Math.sign(goal - s0) || Math.sign(goal - now);
+  const reached = dir>0 ? now>=goal : dir<0 ? now<=goal : Math.abs(now-goal)<0.1;
+  const prog = reached ? 1 : Math.abs(s0-goal)<0.01 ? 0 : clamp((now-s0)/(goal-s0),0,1);
+  const left = Math.abs(goal-now);
+  const txt = reached ? '<b style="color:var(--accent)">Meta atingida! 🎉</b>' : `faltam <b>${f(left)}${unit}</b>`;
+  return `<div class="goal"><div class="gh"><span>${label} <b>${f(goal)}${unit}</b></span><span>${txt}</span></div>
+    <div class="bar"><span style="width:${(prog*100).toFixed(0)}%"></span></div>
+    <div class="gs">Início ${f(s0)}${unit} · agora ${f(now)}${unit} · ${(prog*100).toFixed(0)}% do caminho</div></div>`;
+}
+function renderGoals(){
+  const el = $('#goals'), s = latestState();
+  if(profile.goalW==null && profile.goalFat==null){
+    el.innerHTML = s ? `<button class="btn" id="btnGoal" style="width:100%;margin-top:8px;font-size:14px">🎯 Definir uma meta</button>` : '';
+    const b = $('#btnGoal'); if(b) b.onclick = ()=>document.querySelector('nav button[data-view="v-perfil"]').click();
+    return;
+  }
+  if(!s){ el.innerHTML=''; return }
+  el.innerHTML = `<div class="cmp">${goalBar('Meta de peso', s.w, profile.goalStartW, profile.goalW, ' kg')}${goalBar('Meta de gordura', s.c ? s.c.fat : null, profile.goalStartFat, profile.goalFat, '%')}</div>`;
+}
+
+/* ---------- resumo do período ---------- */
+let sumDays = store.get('sumDays', 30);
+function renderSummary(){
+  const el = $('#summary');
+  $('#sumChips').innerHTML = [7,30,90].map(d=>`<button class="chip ${d===sumDays?'on':''}" data-d="${d}">${d} dias</button>`).join('');
+  $('#sumChips').querySelectorAll('.chip').forEach(b=>b.onclick=()=>{ sumDays=+b.dataset.d; store.set('sumDays',sumDays); renderSummary() });
+  if(history.length<2){ el.innerHTML = '<div class="note" style="margin:0">Salve pelo menos 2 medições para ver o resumo.</div>'; return }
+  const last = history[0], since = last.t - sumDays*DAY;
+  const win = history.filter(h=>h.t>=since);
+  let first = win[win.length-1];
+  if(first===last) first = history.find(h=>h.t<since);
+  if(!first){ el.innerHTML = '<div class="note" style="margin:0">Ainda não há medições suficientes neste período.</div>'; return }
+  const a = entryComp(first), b = entryComp(last), f = v=>Math.abs(v).toFixed(1).replace('.',',');
+  const days = Math.max(1, Math.round((last.t-first.t)/DAY)), n = history.filter(h=>h.t>=first.t).length;
+  const dW = b.w-a.w, dFat = (a.fatKg!=null && b.fatKg!=null) ? b.fatKg-a.fatKg : null, dLean = dFat!=null ? dW-dFat : null;
+  let txt = Math.abs(dW)<0.1 ? `Em ${days} dias seu peso ficou <b>estável</b>.`
+    : `Em ${days} dias você ${dW<0?'perdeu':'ganhou'} <b style="color:var(${dW<0?'--accent':'--warn'})">${f(dW)} kg</b>`+
+      (dFat!=null && Math.abs(dW)>=0.1 ? `: ${f(dFat)} kg de gordura ${dFat<0?'a menos':'a mais'} e ${f(dLean)} kg de massa magra ${dLean<0?'a menos':'a mais'}.` : '.');
+  const perWeek = dW/(days/7);
+  if(days>=5 && Math.abs(dW)>=0.1){
+    txt += ` Ritmo: <b>${perWeek<0?'−':'+'}${f(perWeek)} kg por semana</b>.`;
+    if(perWeek < -1) txt += ' Perder mais de 1 kg por semana costuma levar junto músculo e água; vale ir com calma.';
+    if(profile.goalW!=null){
+      const need = profile.goalW - b.w;
+      if(Math.abs(need)>=0.1 && Math.sign(need)===Math.sign(perWeek)){
+        const wk = Math.ceil(need/perWeek);
+        txt += ` Nesse ritmo, você chega à meta de ${f(profile.goalW)} kg em <b>~${wk} ${wk===1?'semana':'semanas'}</b>.`;
+      }
+    }
+  }
+  const cell = (k,v,u,lower)=>{ if(v==null) return ''; const eq=Math.abs(v)<0.05, cls = eq?'eq':((v<0)===lower?'good':'bad');
+    return `<div class="c"><div class="k">${k}</div><div class="d ${cls}">${eq?'=':(v<0?'▼ ':'▲ ')+f(v)}<small style="font-size:11px">${eq?'':u}</small></div></div>` };
+  el.innerHTML = `<div class="cmp" style="margin-top:0"><div class="sumtxt">${txt}</div>
+    <div class="cols" style="margin-top:12px">${cell('Peso',dW,'kg',true)}${cell('Gordura',dFat,'kg',true)}${cell('Massa magra',dLean,'kg',false)}
+    <div class="c"><div class="k">Pesagens</div><div class="d">${n}</div></div></div></div>`;
+}
+
+/* ---------- corpo ilustrado ---------- */
+const BODY = {
+  water:   {label:'Água', color:'#4aa8ff', unit:'%', val:c=>c.water, fill:v=>v/100, wave:true, rk:'water',
+            sub:c=>`${(c.water*c.w/100).toFixed(1).replace('.',',')} kg de água`,
+            info:'Quanto do seu peso é água. Uma boa hidratação ajuda músculos, rins, intestino e o controle da temperatura.'},
+  fat:     {label:'Gordura', color:'#ffb547', unit:'%', val:c=>c.fat, fill:v=>v/100, rk:'fat',
+            sub:c=>`${c.fatKg.toFixed(1).replace('.',',')} kg de gordura`,
+            info:'Parte do peso que é gordura. Em excesso aumenta o risco de doenças do coração e diabetes; muito baixa também prejudica hormônios e imunidade.'},
+  muscle:  {label:'Músculo', color:'#ff6b7a', unit:'%', val:c=>c.musclePct, fill:v=>v/100,
+            sub:c=>`${c.muscle.toFixed(1).replace('.',',')} kg de massa muscular`,
+            info:'Massa muscular total (inclui a água dos músculos). Mais músculo acelera o metabolismo e protege as articulações.'},
+  protein: {label:'Proteína', color:'#b48cff', unit:'%', val:c=>c.protein, fill:v=>v/100, rk:'protein',
+            sub:c=>`${(c.protein*c.w/100).toFixed(1).replace('.',',')} kg de proteína`,
+            info:'Proteína do corpo, a matéria-prima dos músculos e órgãos. Valor baixo pode indicar perda de massa muscular.'},
+  bone:    {label:'Ossos', color:'#e8eef5', unit:'kg', val:c=>c.bone, skeleton:true,
+            sub:c=>`${(c.bone/c.w*100).toFixed(1).replace('.',',')}% do peso`,
+            info:'Estimativa do peso dos minerais dos ossos. Costuma mudar pouco; exercício de força e cálcio ajudam a manter.'},
+  visceral:{label:'Visceral', color:'#ff8a5c', unit:'', val:c=>c.visceral, belly:true, rk:'visceral',
+            sub:()=>'Escala de 1 a 59',
+            info:'Gordura em volta dos órgãos da barriga, a mais ligada a riscos cardiovasculares. Até 9 é normal; 10–14 alto; 15 ou mais, muito alto.'},
+};
+const SHAPES = '<circle cx="50" cy="20" r="14"/><rect x="44" y="30" width="12" height="14" rx="3"/><rect x="27" y="40" width="46" height="74" rx="16"/><rect x="13" y="44" width="12" height="72" rx="6"/><rect x="75" y="44" width="12" height="72" rx="6"/><rect x="29" y="100" width="42" height="26" rx="10"/><rect x="30" y="116" width="18" height="100" rx="9"/><rect x="52" y="116" width="18" height="100" rx="9"/>';
+const SKELETON = '<g stroke="#e8eef5" stroke-width="2.6" stroke-linecap="round" fill="none" opacity=".9"><circle cx="50" cy="19" r="8.5"/><line x1="50" y1="30" x2="50" y2="106"/><line x1="33" y1="46" x2="67" y2="46"/><path d="M36 55 Q50 49 64 55 M36 64 Q50 58 64 64 M37 73 Q50 67 63 73 M39 82 Q50 77 61 82"/><path d="M35 106 Q50 121 65 106"/><line x1="19" y1="50" x2="19" y2="110"/><line x1="81" y1="50" x2="81" y2="110"/><line x1="39" y1="122" x2="39" y2="210"/><line x1="61" y1="122" x2="61" y2="210"/><circle cx="39" cy="166" r="2.5"/><circle cx="61" cy="166" r="2.5"/></g>';
+function bodySVG(m, v, uid){
+  const H = 222, p = (m && m.fill && v!=null) ? clamp(m.fill(v),0,1) : 0, y = (1-p)*H;
+  let inner = '';
+  if(m && m.fill && v!=null){
+    inner += `<g class="lvl" data-y="${y.toFixed(1)}" style="transform:translateY(${H}px)">`+
+      (m.wave ? `<g class="wave"><path d="M0 5 Q6.25 0 12.5 5 T25 5 T37.5 5 T50 5 T62.5 5 T75 5 T87.5 5 T100 5 T112.5 5 T125 5 V12 H0Z" fill="${m.color}" opacity=".9"/></g>` : '')+
+      `<rect x="0" y="${m.wave?11:0}" width="100" height="240" fill="${m.color}" opacity=".85"/></g>`;
+  }
+  if(m && m.skeleton && v!=null) inner += SKELETON;
+  if(m && m.belly && v!=null){
+    const k = clamp(v,1,30)/30;
+    inner += `<ellipse cx="50" cy="86" rx="${9+k*14}" ry="${7+k*11}" fill="${m.color}" opacity="${(0.35+k*0.6).toFixed(2)}"/>`+
+             `<ellipse cx="50" cy="86" rx="${4+k*6}" ry="${3+k*5}" fill="${m.color}"/>`;
+  }
+  return `<svg class="body" viewBox="0 0 100 222"><defs><clipPath id="clip-${uid}">${SHAPES}</clipPath></defs>
+    <g fill="#18202b">${SHAPES}</g><g clip-path="url(#clip-${uid})">${inner}</g>
+    <g fill="none" stroke="#2c3846" stroke-width="1">${SHAPES}</g></svg>`;
+}
+let bodyKey = store.get('bodyKey','water');
+const bodySig = {};
+function renderBody(sel, c, p, uid, emptyMsg){
+  const el = $(sel); if(!el) return;
+  const avail = c ? Object.keys(BODY).filter(k=>{ const v=BODY[k].val(c); return v!=null && isFinite(v) }) : [];
+  const key = avail.includes(bodyKey) ? bodyKey : (avail[0] || bodyKey);
+  const sig = key+'|'+(c ? [c.w,c.water,c.fat,c.muscle,c.bone,c.visceral,c.protein].join(',') : 'x'+emptyMsg) + '|' + p.sex + p.age;
+  if(bodySig[uid]===sig) return; bodySig[uid]=sig;
+  const m = BODY[key], v = c ? m.val(c) : null;
+  const chips = `<div class="chips">${Object.keys(BODY).map(k=>`<button class="chip ${k===key?'on':''}" data-k="${k}" ${c && !avail.includes(k)?'disabled':''}>${BODY[k].label}</button>`).join('')}</div>`;
+  let text;
+  if(c==null || v==null){
+    text = `<div class="bl">${m.label}</div><div class="bv">--</div><div class="bi">${emptyMsg || 'Sem dados de composição para esta medição.'}</div>`;
+  } else {
+    const r = m.rk ? rate(m.rk, v, p) : null, R = m.rk ? ranges(m.rk, p) : null;
+    const ideal = R ? (m.rk==='visceral' ? 'até 9' : `${R[0]}–${R[1]}${m.unit}`) : null;
+    const dec = m.unit==='' ? 0 : 1;
+    text = `<div class="bl" style="color:${m.color}">${m.label}</div>
+      <div class="bv">${v.toFixed(dec).replace('.',',')}<small>${m.unit}</small></div>
+      <div class="bs">${m.sub(c)}</div>
+      ${r ? `<span class="tag ${r[0]}" style="margin-top:8px">${r[1]}</span>` : ''}
+      <div class="bi">${ideal ? `Faixa ideal: <b>${ideal}</b><br>` : ''}${m.info}</div>`;
+  }
+  el.innerHTML = chips + `<div class="bodyv">${bodySVG(m, v, uid)}<div class="bt">${text}</div></div>`;
+  el.querySelectorAll('.chip').forEach(b=>b.onclick=()=>{
+    bodyKey = b.dataset.k; store.set('bodyKey', bodyKey);
+    Object.keys(bodySig).forEach(k=>bodySig[k]=null);
+    renderBody(sel, c, p, uid, emptyMsg);
+  });
+  const on = el.querySelector('.chip.on'), row = el.querySelector('.chips');
+  if(on && row) row.scrollLeft = on.offsetLeft - row.offsetLeft - 16;
+  requestAnimationFrame(()=>requestAnimationFrame(()=>el.querySelectorAll('.lvl').forEach(g=>g.style.transform=`translateY(${g.dataset.y}px)`)));
+}
+
+/* ---------- peso na tela ---------- */
+function showWeight(w, final){
+  cur.weight = w; cur.final = final;
+  $('#wval').textContent = w.toFixed(1).replace('.',',');
+  $('#arc').setAttribute('stroke-dasharray', `${Math.min(405, w/150*405)} 541`);
+  const st = $('#wstate');
+  st.className = 'wstate ' + (final?'final':'live');
+  st.textContent = final ? (cur.impedance ? 'Medição completa ✓' : 'Peso estável ✓') : 'Medindo…';
+  if(!final){ cur.savedT = null; $('#btnSave').textContent = 'Salvar' }
+  $('#btnSave').disabled = !final || !!cur.savedT;
+  renderMetrics(); renderCompare(); renderGoals(); $('#remind').innerHTML='';
+  if(final && profile.autoSave && !cur.savedT && !cur.demo) saveMeasurement(true);
+}
+/* comparação com a última medição salva */
+function entryAlgo(h){ return h.algo || (h.r===600 ? 'okok' : null) }
+function entryComp(h){
+  if(h.src!=='watch' || !h.m) return fullComp(h.w, h.r, h.p || profile, entryAlgo(h));
+  const p = h.p || profile, w = h.w, m = h.m, c = fullComp(w, null, p, null);
+  if(m.fat!=null){ c.fat = m.fat; c.fatKg = m.fatKg ?? w*m.fat/100 }
+  else if(m.fatKg!=null){ c.fatKg = m.fatKg; c.fat = m.fatKg/w*100 }
+  c.ffm = m.ffm ?? (c.fatKg!=null ? w - c.fatKg : null);
+  if(c.ffm!=null){
+    c.bone = m.bone ?? 0.055*c.ffm; c.muscle = c.ffm - c.bone; c.musclePct = c.muscle/w*100;
+    const water = m.waterL ?? 0.73*c.ffm; c.water = water/w*100;
+    c.protein = Math.max(0, (c.ffm - water - c.bone)/w*100);
+  }
+  if(m.skeletal!=null) c.skeletal = m.skeletal;
+  if(m.bmr!=null) c.bmr = m.bmr;
+  c.src = 'watch';
+  return c;
+}
+function compareHTML(c, prev, refT){
+  const pc = entryComp(prev);
+  const rows = [
+    ['Peso', c.w, prev.w, 'kg', true],
+    ['Gordura', c.fat, pc.fat, '%', true],
+    ['Músculo', c.muscle, pc.muscle, 'kg', false],
+    ['Água', c.water, pc.water, '%', false],
+    ['IMC', c.bmi, pc.bmi, '', true],
+  ].filter(r=>r[1]!=null && r[2]!=null);
+  const day = t=>new Date(t).setHours(0,0,0,0);
+  const days = Math.round((day(refT||Date.now()) - day(prev.t))/86400000);
+  const when = refT ? (days<=0 ? 'mesmo dia' : days===1 ? '1 dia antes' : `${days} dias antes`)
+                    : (days<=0 ? 'hoje' : days===1 ? 'ontem' : `há ${days} dias`);
+  const f = v=>Math.abs(v).toFixed(1).replace('.',',');
+  return `<div class="cmp"><div class="hd">Comparado com ${new Date(prev.t).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})} (${when})</div><div class="cols">`+
+    rows.map(([k,now,old,u,lowerBetter])=>{
+      const d = now-old, eq = Math.abs(d)<0.05;
+      const cls = eq ? 'eq' : ((d<0)===lowerBetter ? 'good' : 'bad');
+      return `<div class="c"><div class="k">${k}</div><div class="d ${cls}">${eq?'=':(d<0?'▼ ':'▲ ')+f(d)}<small style="font-size:11px">${eq?'':u}</small></div><div class="p">antes ${f(old)}${u}</div></div>`;
+    }).join('') + '</div></div>';
+}
+function renderCompare(){
+  const el = $('#cmp');
+  if(!cur.weight){ el.innerHTML=''; return }
+  const prev = history.find(h=>h.t!==cur.savedT);
+  if(!prev){ el.innerHTML='<div class="cmp"><div class="hd" style="margin:0;text-align:center">Primeira medição: salve para comparar nas próximas.</div></div>'; return }
+  el.innerHTML = compareHTML(fullComp(cur.weight, cur.impedance, profile, cur.algo), prev);
+}
+function onWeight(w, opts={}){
+  if(!(w>2 && w<300)) return;
+  // mantém o resultado final na tela enquanto a balança repete pacotes parecidos
+  if(cur.final && opts.stable===false && cur.weight && Math.abs(w-cur.weight)<0.3) return;
+  if(opts.impedance) cur.impedance = opts.impedance;
+  if(opts.extra) cur.extra = {...cur.extra, ...opts.extra};
+  recentW.push({w, t:Date.now()}); recentW = recentW.slice(-6);
+  // estável: flag explícita, ou 4 leituras iguais seguidas
+  let stable = opts.stable === true;
+  if(opts.stable == null && recentW.length>=4){
+    const last = recentW.slice(-4).map(x=>x.w);
+    stable = Math.max(...last)-Math.min(...last) < 0.06;
+  }
+  showWeight(w, stable);
+}
+
+/* ---------- log ---------- */
+const hex = u8 => [...u8].map(b=>b.toString(16).padStart(2,'0')).join(' ');
+function log(src, u8){
+  const el = $('#log');
+  const line = document.createElement('div');
+  const t = new Date().toLocaleTimeString('pt-BR');
+  line.innerHTML = `<span class="src">${t} ${src}</span>\n${u8?hex(u8):''}`;
+  el.appendChild(line);
+  while(el.children.length>300) el.firstChild.remove();
+  el.scrollTop = el.scrollHeight;
+}
+function logText(t){ const el=$('#log'); const d=document.createElement('div'); d.textContent='› '+t; el.appendChild(d); el.scrollTop=el.scrollHeight }
+
+/* ---------- parsers ---------- */
+function rd(u8, off, end){
+  if(off<0 || off+1>=u8.length) return null;
+  return end==='le' ? u8[off] | (u8[off+1]<<8) : (u8[off]<<8) | u8[off+1];
+}
+// Bluetooth SIG: Weight Measurement 0x2A9D
+function parseWeightMeasurement(u8){
+  const flags=u8[0], imperial=flags&1;
+  const raw = u8[1]|(u8[2]<<8);
+  const w = imperial ? raw*0.01*0.453592 : raw*0.005;
+  onWeight(w, {stable:true});
+}
+// Bluetooth SIG: Body Composition Measurement 0x2A9C
+function parseBodyComp(u8){
+  const flags = u8[0]|(u8[1]<<8); const imp = flags&1; const mres = imp?0.01*0.453592:0.005;
+  let i=2; const u16=()=>{const v=u8[i]|(u8[i+1]<<8); i+=2; return v};
+  const ex = {fat: u16()*0.1}; let R=null, w=null;
+  if(flags&0x02) i+=7; if(flags&0x04) i+=1;
+  if(flags&0x08) ex.bmr = u16()/4.184; // kJ → kcal
+  if(flags&0x10) u16();
+  if(flags&0x20) ex.muscle = u16()*mres;
+  if(flags&0x40) ex.ffm = u16()*mres;
+  if(flags&0x80) u16(); if(flags&0x100) u16();
+  if(flags&0x200) R = u16()*0.1;
+  if(flags&0x400) w = u16()*mres;
+  if(w) onWeight(w,{stable:true, impedance:R, extra:ex});
+  else { cur.extra={...cur.extra,...ex}; if(R) cur.impedance=R; renderMetrics() }
+}
+// Pacotes proprietários (OKOK / Chipsea e similares)
+/* OKOK / Chipsea "C0" (anúncio BLE): company ID = [0xC0, contador], depois 13 bytes:
+   [0,1] peso BE  [2,3] impedância BE ÷10  [4,5] ID do produto  [6] atributos  [7..12] MAC
+   atributos: bit0 = medição final, bits1-2 = casas decimais, bits3-4 = unidade (0 kg, 1 jin, 2 lb) */
+let okokInfo = store.get('scaleInfo', null);
+function isOkokC0(u8){ return u8.length>=15 && u8[0]===0xC0 }
+function parseOkokC0(u8){
+  if(!isOkokC0(u8)) return false;
+  lastPacket = u8;
+  const attr = u8[8], res = (attr>>1)&3, unit = (attr>>3)&3, final = !!(attr&1);
+  let w = ((u8[2]<<8)|u8[3]) / Math.pow(10,res);
+  if(unit===1) w = w/2; else if(unit===2) w = w*0.45359237;
+  const R = ((u8[4]<<8)|u8[5]) / 10;
+  if(!okokInfo){
+    okokInfo = {product:'0x'+hex(u8.slice(6,8)).replace(' ',''), mac:[...u8.slice(9,15)].reverse().map(b=>b.toString(16).padStart(2,'0')).join(':').toUpperCase()};
+    logText(`balança OKOK (formato C0) • produto ${okokInfo.product} • MAC ${okokInfo.mac}`);
+    store.set('scaleInfo', okokInfo); renderScaleCard();
+  }
+  cur.algo = 'okok';
+  if(w>0) onWeight(w, {stable:final, impedance: R>0 ? R : null});
+  return true;
+}
+function parseVendor(u8){
+  if(parseOkokC0(u8)) return;
+  lastPacket = u8;
+  let w = null;
+  if(decoder){
+    const raw = rd(u8, decoder.off, decoder.end);
+    if(raw!=null) w = raw/decoder.div;
+  } else {
+    // heurística: primeiro valor plausível que está variando entre pacotes
+    w = guessWeight(u8);
+  }
+  let R = null;
+  if(impCfg.off>=0){ const r = rd(u8, impCfg.off, impCfg.end); if(r) R = r/impCfg.div; }
+  if(w!=null) onWeight(w, R?{impedance:R}:{});
+}
+let prevPkt = null;
+function guessWeight(u8){
+  const cands=[];
+  for(let off=0; off<u8.length-1; off++) for(const end of ['be','le']) for(const div of [100,10]){
+    const v = rd(u8,off,end)/div;
+    if(v>5 && v<250) cands.push({off,end,div,v,chg: prevPkt && prevPkt.length===u8.length && rd(prevPkt,off,end)!==rd(u8,off,end)});
+  }
+  prevPkt = u8;
+  const c = cands.find(c=>c.chg && c.div===100) || cands.find(c=>c.chg) || null;
+  return c ? c.v : null;
+}
+
+/* ---------- calibração ---------- */
+$('#btnCal').onclick = ()=>{
+  const target = parseFloat(($('#calW').value||'').replace(',','.'));
+  if(!target) return toast('Digite o peso do display');
+  if(!lastPacket) return toast('Nenhum pacote recebido ainda');
+  let best=null;
+  for(let off=0; off<lastPacket.length-1; off++) for(const end of ['be','le']) for(const div of [100,10,20,200]){
+    const v = rd(lastPacket,off,end)/div, err = Math.abs(v-target);
+    if(err<0.15 && (!best || err<best.err)) best={off,end,div,err};
+  }
+  if(!best) { $('#calInfo').textContent='Não encontrei esse valor no último pacote. Tente de novo com o peso parado.'; return }
+  decoder = {off:best.off, end:best.end, div:best.div}; store.set('decoder',decoder);
+  $('#calInfo').textContent = `Peso: byte ${best.off}, ${best.end.toUpperCase()}, ÷${best.div}`;
+  toast('Calibrado!'); parseVendor(lastPacket);
+};
+$('#btnResetDec').onclick = ()=>{ decoder=null; store.set('decoder',null); impCfg={off:-1,end:'be',div:1}; store.set('imp',impCfg); loadImp(); $('#calInfo').textContent=''; toast('Decodificação automática') };
+function loadImp(){ $('#impOff').value=impCfg.off; $('#impEnd').value=impCfg.end; $('#impDiv').value=String(impCfg.div) }
+['#impOff','#impEnd','#impDiv'].forEach(s=>$(s).onchange=()=>{ impCfg={off:+$('#impOff').value, end:$('#impEnd').value, div:+$('#impDiv').value}; store.set('imp',impCfg) });
+
+/* ---------- Bluetooth ---------- */
+const SERVICES = [0x181d,0x181b,0x180f,0x180a,0xfff0,0xffe0,0xffb0,0xffa0,0xfee7,0xffc0,0xffd0,
+  '0000ffe0-0000-1000-8000-00805f9b34fb','6e400001-b5a3-f393-e0a9-e50e24dcca9e'];
+function setPill(state, txt){ const p=$('#pill'); p.className='pill '+(state||''); $('#pillTxt').textContent=txt }
+function bleSupportNote(){
+  if(NATIVE){ $('#bleNote').innerHTML=''; return true }
+  const ua = navigator.userAgent, ios = /iPhone|iPad|iPod/.test(ua);
+  let msg = '';
+  if(!window.isSecureContext) msg = 'O Bluetooth só funciona em página <b>https</b>.';
+  else if(!navigator.bluetooth) msg = ios
+    ? 'O Safari do iPhone não tem Web Bluetooth. Abra este app no navegador <b>Bluefy</b> (App Store), ou use um Android com Chrome.'
+    : 'Este navegador não tem Web Bluetooth. Use o <b>Chrome</b> ou <b>Edge</b> no Android, Windows, Mac ou Linux.';
+  $('#bleNote').innerHTML = msg ? `<div class="note warn">${msg}<br>Enquanto isso, teste em <b>Avançado → Modo demonstração</b>.</div>` : '';
+  return !msg;
+}
+$('#btnConnect').onclick = async ()=>{
+  if(NATIVE && !(device && device.gatt)){ toast('No app, use Buscar por sinal'); return $('#btnScan').click() }
+  if(device && device.gatt && device.gatt.connected){ device.gatt.disconnect(); return }
+  stopDemo();
+  if(!bleSupportNote()) return;
+  try{
+    setPill('busy','Procurando…');
+    // IDs de fabricante usados por balanças OKOK/Chipsea (sem isto o Chrome esconde os dados do anúncio)
+    const MFR = [0xF0FF,0xFFFF,0x00C0,0xC0C0];
+    for(let i=0;i<256;i++){ MFR.push((i<<8)|0xCA); MFR.push((i<<8)|0xC0) }
+    let opts = {acceptAllDevices:true, optionalServices:SERVICES, optionalManufacturerData:[...new Set(MFR)]};
+    try{ device = await navigator.bluetooth.requestDevice(opts) }
+    catch(e){ if(e.name==='TypeError'){ delete opts.optionalManufacturerData; device = await navigator.bluetooth.requestDevice(opts) } else throw e }
+    lockedId = device.id; store.set('lockedId', lockedId);
+    device.addEventListener('gattserverdisconnected', ()=>{ setPill('','Desconectado'); $('#btnConnect').textContent='Parear'; $('#btnRead').textContent='Ler balança'; logText('desconectado') });
+    logText('dispositivo: '+(device.name||device.id));
+    // balanças "broadcast" (muitas OKOK) mandam o peso no anúncio BLE
+    if(device.watchAdvertisements){
+      let advN = 0;
+      device.addEventListener('advertisementreceived', ev=>{
+        advN++;
+        if(advN<=3 || advN%20===0) logText(`anúncio #${advN} sinal ${ev.rssi} dBm, fabricante [${[...ev.manufacturerData.keys()].map(k=>'0x'+k.toString(16)).join(',')}], serviços [${[...ev.serviceData.keys()].map(k=>k.slice(4,8)).join(',')}]`);
+        ev.serviceData.forEach((dv,uuid)=>{ const u8=new Uint8Array(dv.buffer,dv.byteOffset,dv.byteLength); log('SVC '+uuid.slice(4,8), u8); parseVendor(u8) });
+        ev.manufacturerData.forEach((dv,cid)=>{
+          const d = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength);
+          const u8 = new Uint8Array(d.length+2); u8[0]=cid&255; u8[1]=cid>>8; u8.set(d,2);
+          log('ADV 0x'+cid.toString(16), u8); parseVendor(u8);
+        });
+      });
+      device.watchAdvertisements().then(()=>logText('ouvindo anúncios')).catch(()=>{});
+    }
+    setPill('busy','Conectando…');
+    const server = await device.gatt.connect();
+    const services = await server.getPrimaryServices();
+    let n=0;
+    for(const s of services){
+      let chars=[]; try{ chars = await s.getCharacteristics() }catch(e){ continue }
+      for(const c of chars){
+        if(!(c.properties.notify||c.properties.indicate)) continue;
+        try{
+          await c.startNotifications(); n++;
+          const id = c.uuid.slice(4,8);
+          c.addEventListener('characteristicvaluechanged', e=>{
+            const u8 = new Uint8Array(e.target.value.buffer);
+            log(id, u8);
+            if(id==='2a9d') parseWeightMeasurement(u8);
+            else if(id==='2a9c') parseBodyComp(u8);
+            else if(id==='2a19') logText('bateria '+u8[0]+'%');
+            else parseVendor(u8);
+          });
+          logText('inscrito em '+s.uuid.slice(4,8)+'/'+id);
+        }catch(e){}
+      }
+    }
+    setPill('on', device.name || 'Conectado');
+    $('#btnConnect').textContent='Desconectar'; $('#btnRead').textContent='Desconectar';
+    $('#wstate').className='wstate'; $('#wstate').textContent='Suba na balança';
+    if(!n) logText('nenhuma característica de notificação — tentando só anúncios');
+    toast('Balança conectada');
+  }catch(e){
+    if(device && device.watchAdvertisements && e.name==='NetworkError'){
+      setPill('on','Modo anúncio'); logText('sem conexão GATT, usando anúncios');
+      $('#wstate').className='wstate'; $('#wstate').textContent='Suba na balança';
+      setTimeout(()=>{
+        if(!lastPacket){
+          logText('nenhum dado no anúncio — use "Buscar por sinal"');
+          $('#bleNote').innerHTML='<div class="note warn">A balança foi encontrada, mas ainda não chegou peso. Toque em <b>Ler balança</b> de novo: ela já vem selecionada.</div>';
+        }
+      }, 8000);
+      return;
+    }
+    setPill('','Desconectado');
+    if(e.name!=='NotFoundError') { logText('erro: '+e.message); toast('Não foi possível conectar') }
+    if(e.name==='SecurityError') $('#bleNote').innerHTML='<div class="note warn">O navegador bloqueou o Bluetooth nesta janela. Abra o app em uma aba própria (https) no Chrome.</div>';
+  }
+};
+
+/* ---------- busca por sinal (anúncios BLE) ---------- */
+let scan=null, seen=new Map(), lockedId=store.get('lockedId',null), scanRender=0;
+$('#btnScan').onclick = async ()=>{
+  stopDemo();
+  if(scan) return stopScan();
+  if(NATIVE) return startNativeScan();
+  if(!bleSupportNote()) return;
+  if(!navigator.bluetooth.requestLEScan){
+    $('#bleNote').innerHTML = $('#conNote').innerHTML = '<div class="note warn">A busca por sinal está desligada no Chrome. Abra <b>chrome://flags</b>, procure <b>Experimental Web Platform features</b>, marque <b>Enabled</b> e toque em <b>Relaunch</b>. Depois abra o app de novo.</div>';
+    return;
+  }
+  try{
+    scan = await navigator.bluetooth.requestLEScan({acceptAllAdvertisements:true, keepRepeatedDevices:true});
+  }catch(e){ logText('busca: '+e.message); toast('Não foi possível iniciar a busca'); return }
+  seen.clear();
+  navigator.bluetooth.addEventListener('advertisementreceived', onScanAdv);
+  setPill('busy','Buscando…'); $('#scanBox').style.display='block'; renderScan();
+  $('#btnRead').textContent = 'Parar leitura'; $('#btnScan').textContent = 'Buscando…';
+  $('#wstate').className='wstate'; $('#wstate').textContent='Suba na balança';
+};
+$('#btnStopScan').onclick = stopScan;
+// botão principal da tela Medir: busca por sinal quando possível, senão pareamento
+$('#btnRead').onclick = ()=>{
+  if(scan) return stopScan();
+  if(device && device.gatt && device.gatt.connected) return $('#btnConnect').click();
+  if(NATIVE || (navigator.bluetooth && navigator.bluetooth.requestLEScan)) $('#btnScan').click();
+  else $('#btnConnect').click();
+};
+$('#btnForget').onclick = ()=>{
+  stopScan(); lockedId = null; store.set('lockedId', null); okokInfo = null; store.set('scaleInfo', null);
+  renderScaleCard(); toast('Balança esquecida');
+};
+function renderScaleCard(){
+  const el = $('#scaleCard'); if(!el) return;
+  const s = lockedId ? seen.get(lockedId) : null, info = okokInfo;
+  if(!lockedId && !info){
+    el.innerHTML = '<div class="t" style="font-size:18px">Nenhuma balança</div><div class="s">Toque em <b>Buscar por sinal</b> e suba na balança.</div>'; return;
+  }
+  const live = s && Date.now()-s.t < 10000;
+  el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <div class="t" style="font-size:18px;margin:0">⚖️ ${s && s.name ? s.name.replace(/</g,'&lt;') : info ? 'Balança OKOK' : 'Balança'}</div>
+      <span class="tag ${live?'ok':''}" style="margin:0">${live ? 'recebendo' : scan ? 'aguardando' : 'salva'}</span></div>
+    <div class="s">${info ? `Formato OKOK C0 · produto ${info.product}<br>MAC ${info.mac}` : 'Formato ainda não identificado'}${s ? `<br>Sinal ${bars(s.rssi)} ${s.rssi} dBm` : ''}</div>`;
+}
+function stopScan(){
+  if(scan){
+    if(scan.native){
+      BLE.stopLEScan().catch(()=>{});
+      if(nativeListener){ try{ nativeListener.remove() }catch(e){} nativeListener=null }
+    } else { try{ scan.stop() }catch(e){} }
+    scan=null;
+  }
+  navigator.bluetooth && navigator.bluetooth.removeEventListener('advertisementreceived', onScanAdv);
+  $('#scanBox').style.display='none'; setPill('','Desconectado');
+  $('#btnRead').textContent = 'Ler balança'; $('#btnScan').textContent = 'Buscar por sinal';
+  renderScaleCard();
+}
+/* Bluetooth nativo (app Android): mesmo tratamento dos anúncios da versão web */
+let nativeListener = null;
+function hexToBytes(h){
+  h = String(h||'').replace(/[^0-9a-f]/gi,'');
+  const u = new Uint8Array(h.length>>1);
+  for(let i=0;i<u.length;i++) u[i] = parseInt(h.substr(i*2,2),16);
+  return u;
+}
+async function startNativeScan(){
+  try{ await BLE.initialize({androidNeverForLocation:false}) }
+  catch(e){ toast('Permita o Bluetooth e a localização para ler a balança'); return }
+  try{ const en = await BLE.isEnabled(); if(!en.value){ try{ await BLE.requestEnable() }catch(e){ toast('Ligue o Bluetooth do celular'); return } } }catch(e){}
+  try{ const loc = await BLE.isLocationEnabled(); if(!loc.value) toast('Ligue a localização do celular para achar a balança') }catch(e){}
+  seen.clear();
+  try{
+    nativeListener = await BLE.addListener('onScanResult', r=>{
+      const md = new Map(), sd = new Map();
+      Object.entries(r.manufacturerData||{}).forEach(([k,v])=>{ const b=hexToBytes(v); md.set(+k, new DataView(b.buffer)) });
+      Object.entries(r.serviceData||{}).forEach(([k,v])=>{ const b=hexToBytes(v); sd.set(k, new DataView(b.buffer)) });
+      const dev = r.device || {};
+      onScanAdv({device:{id:dev.deviceId, name:dev.name||r.localName}, name:r.localName, rssi:r.rssi, manufacturerData:md, serviceData:sd});
+    });
+    await BLE.requestLEScan({allowDuplicates:true, scanMode:2});
+  }catch(e){ toast('Não foi possível iniciar a busca'); logText('busca nativa: '+(e.message||e)); return }
+  scan = {native:true};
+  setPill('busy','Buscando…'); $('#scanBox').style.display='block'; renderScan();
+  $('#btnRead').textContent = 'Parar leitura'; $('#btnScan').textContent = 'Buscando…';
+  $('#wstate').className='wstate'; $('#wstate').textContent='Suba na balança';
+}
+function onScanAdv(ev){
+  const id = ev.device.id;
+  const s = seen.get(id) || {id, name:'', rssi:-127, data:'', changes:0};
+  s.name = ev.device.name || ev.name || s.name; if(ev.rssi!=null) s.rssi = ev.rssi; s.t = Date.now();
+  const packets = [];
+  ev.manufacturerData.forEach((dv,cid)=>{
+    const d = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength);
+    const u8 = new Uint8Array(d.length+2); u8[0]=cid&255; u8[1]=cid>>8; u8.set(d,2); packets.push(u8);
+  });
+  ev.serviceData && ev.serviceData.forEach((dv)=>packets.push(new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength)));
+  const h = packets.map(hex).join('|');
+  if(h && s.data && h!==s.data) s.changes++;
+  if(h) s.data = h;
+  seen.set(id, s);
+  // seleciona sozinho a primeira balança OKOK C0 encontrada
+  if(packets.some(isOkokC0)){
+    s.isC0 = true;
+    const lockedDev = seen.get(lockedId);
+    if(id!==lockedId && (!lockedId || !lockedDev || !lockedDev.isC0)){
+      lockedId = id; store.set('lockedId', lockedId); toast('Balança OKOK encontrada');
+    }
+  }
+  if(id===lockedId && h){
+    if(h!==s.lastLogged){ s.lastLogged=h; packets.forEach(u8=>log('ADV '+(s.name||'balança'), u8)) }
+    packets.forEach(u8=>parseVendor(u8));
+    setPill('on', s.name || 'Balança');
+  }
+  if(Date.now()-scanRender>700){ scanRender=Date.now(); renderScan(); renderScaleCard() }
+}
+function bars(r){ return r>-60?'▮▮▮▮':r>-70?'▮▮▮▯':r>-80?'▮▮▯▯':'▮▯▯▯' }
+function renderScan(){
+  const list = [...seen.values()].filter(s=>Date.now()-s.t<15000).sort((a,b)=>b.rssi-a.rssi).slice(0,15);
+  $('#scanList').innerHTML = list.length ? list.map(s=>`<div class="hitem" style="${s.id===lockedId?'border-color:var(--accent)':''}">
+    <div><div class="w" style="font-size:15px">${s.name ? s.name.replace(/</g,'&lt;') : 'Sem nome'}</div>
+      <div class="d"><span class="mono">${bars(s.rssi)}</span> ${s.rssi} dBm ${s.changes>2?'<span class="tag ok" style="margin-left:4px">dados mudando</span>':''}</div></div>
+    <button class="btn ${s.id===lockedId?'primary':''}" data-id="${s.id}" style="flex:0 0 auto;padding:10px 14px">${s.id===lockedId?'Selecionada':'É esta'}</button>
+  </div>`).join('') : '<div class="empty">Procurando aparelhos…</div>';
+  $('#scanList').querySelectorAll('button').forEach(b=>b.onclick=()=>{
+    lockedId=b.dataset.id; store.set('lockedId',lockedId); prevPkt=null; recentW=[];
+    $('#wstate').className='wstate'; $('#wstate').textContent='Suba na balança';
+    toast('Balança selecionada'); renderScan();
+  });
+}
+
+/* ---------- demonstração ---------- */
+function stopDemo(){ if(demoTimer){ clearInterval(demoTimer); demoTimer=null } }
+$('#btnDemo').onclick = ()=>{
+  stopDemo(); document.querySelector('nav button').click();
+  cur = {weight:null, impedance:null, final:false, extra:{}, demo:true}; recentW=[];
+  setPill('on','Demonstração');
+  const target = 70 + Math.random()*12; let w = 0, step = 0;
+  demoTimer = setInterval(()=>{
+    step++;
+    w = step<12 ? target*(1-Math.exp(-step/3)) + (Math.random()-.5)*0.6 : target;
+    const raw = Math.round(w*100);
+    const u8 = new Uint8Array([0xca,0x10,raw>>8,raw&255,0,0,0,0]);
+    if(step>=16){ const R=420+Math.round(Math.random()*120); u8[4]=R>>8; u8[5]=R&255; cur.impedance=R }
+    log('demo', u8);
+    onWeight(raw/100, {stable: step>=16});
+    if(step>=16){ stopDemo(); toast('Medição concluída') }
+  }, 280);
+};
+
+/* ---------- histórico ---------- */
+function saveMeasurement(auto){
+  if(!cur.weight || cur.savedT) return;
+  const c = compose(cur.weight, cur.impedance, profile);
+  const t = Date.now();
+  history.unshift({t, w:+cur.weight.toFixed(2), r:cur.impedance||null, fat: cur.extra.fat ?? (c.fat!=null?+c.fat.toFixed(1):null), bmi:+c.bmi.toFixed(1),
+    muscle: c.muscle!=null?+c.muscle.toFixed(1):null, water: c.water!=null?+c.water.toFixed(1):null, visceral: c.visceral ?? null,
+    algo: cur.algo || null, p: {...profile}});
+  store.set('history', history);
+  cur.savedT = t;
+  $('#btnSave').disabled = true; $('#btnSave').textContent = 'Salvo ✓';
+  toast(auto ? 'Medição salva automaticamente' : 'Medição salva');
+  renderCompare(); renderGoals();
+}
+$('#btnSave').onclick = ()=>saveMeasurement(false);
+function renderHistory(){
+  const el=$('#hist');
+  renderSummary();
+  if(!history.length){ el.innerHTML='<div class="empty">Nenhuma medição salva ainda.</div>'; $('#chart').innerHTML=''; $('#chartChips').innerHTML=''; $('#chartStat').innerHTML=''; return }
+  el.innerHTML = history.map((h,i)=>{
+    const c = entryComp(h);
+    return `<div class="hitem" data-i="${i}">
+    <div><div class="w">${h.w.toFixed(1).replace('.',',')} kg${h.src==='watch'?' <span class="tag ok" style="margin:0 0 0 4px;vertical-align:middle">⌚ relógio</span>':''}</div><div class="d">${new Date(h.t).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}</div></div>
+    <div style="display:flex;align-items:center"><div class="m">IMC ${c.bmi.toFixed(1).replace('.',',')}<br>${c.fat!=null?'Gordura '+c.fat.toFixed(1).replace('.',',')+'%':'sem impedância'}</div>
+    <span style="color:var(--muted);font-size:20px;margin-left:10px">›</span></div></div>`;
+  }).join('');
+  el.querySelectorAll('.hitem').forEach(b=>b.onclick=()=>openDetail(+b.dataset.i));
+  drawChart();
+}
+function openDetail(i){
+  const h = history[i]; if(!h) return;
+  const p = h.p || profile, c = entryComp(h), prev = history[i+1];
+  $('#sheetBody').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin:6px 0 10px">
+      <div><div class="small">${new Date(h.t).toLocaleString('pt-BR',{dateStyle:'full',timeStyle:'short'})}</div>
+      <div style="font-size:44px;font-weight:800;letter-spacing:-.03em">${h.w.toFixed(1).replace('.',',')}<span class="wunit"> kg</span></div></div>
+      <button class="btn" id="sheetClose" style="flex:0 0 auto;padding:10px 16px">Fechar</button>
+    </div>
+    ${prev ? compareHTML(c, prev, h.t) : ''}
+    <h2>Seu corpo</h2><div id="bodyDetail"></div>
+    <h2>Análise</h2>${analysisHTML(c, p)}
+    <h2>Composição corporal</h2><div class="grid">${metricsHTML(h.w, h.r, entryAlgo(h), {}, p, c)}</div>
+    ${h.p ? `<p class="small" style="margin-top:10px">Perfil na data: ${h.p.sex==='m'?'masculino':'feminino'}, ${h.p.age} anos, ${h.p.height} cm.</p>` : '<p class="small" style="margin-top:10px">Calculado com o seu perfil atual.</p>'}
+    <button class="btn" id="sheetDel" style="width:100%;margin-top:16px;color:var(--bad)">Apagar medição</button>`;
+  bodySig.detail = null;
+  renderBody('#bodyDetail', c, p, 'detail');
+  $('#sheet').classList.add('open'); document.body.style.overflow='hidden';
+  $('#sheetClose').onclick = closeDetail;
+  $('#sheetDel').onclick = e=>{
+    const b = e.currentTarget;
+    if(!b.dataset.armed){ b.dataset.armed='1'; b.textContent='Toque de novo para confirmar'; return }
+    history.splice(i,1); store.set('history',history); closeDetail(); renderHistory(); renderCompare(); renderGoals(); renderWatch(); toast('Medição apagada');
+  };
+}
+function closeDetail(){ $('#sheet').classList.remove('open'); document.body.style.overflow='' }
+$('#sheetBg').onclick = closeDetail;
+
+const CHART = {
+  w:       {label:'Peso', unit:'kg', color:'#3ee6b5', lower:true,  get:(h,c)=>h.w},
+  fat:     {label:'Gordura', unit:'%', color:'#ffb547', lower:true,  get:(h,c)=>c.fat},
+  muscle:  {label:'Músculo', unit:'kg', color:'#ff6b7a', lower:false, get:(h,c)=>c.muscle},
+  water:   {label:'Água', unit:'%', color:'#4aa8ff', lower:false, get:(h,c)=>c.water},
+  visceral:{label:'Visceral', unit:'', color:'#ff8a5c', lower:true,  get:(h,c)=>c.visceral},
+  bmi:     {label:'IMC', unit:'', color:'#b48cff', lower:true,  get:(h,c)=>c.bmi},
+};
+let chartKey = store.get('chartKey','w');
+function drawChart(){
+  const pts = history.slice(0,60).reverse(), W=320, H=180, P=14;
+  if(!CHART[chartKey]) chartKey='w';
+  const m = CHART[chartKey];
+  $('#chartChips').innerHTML = Object.keys(CHART).map(k=>`<button class="chip ${k===chartKey?'on':''}" data-k="${k}">${CHART[k].label}</button>`).join('');
+  $('#chartChips').querySelectorAll('.chip').forEach(b=>b.onclick=()=>{ chartKey=b.dataset.k; store.set('chartKey',chartKey); drawChart() });
+  const vals = pts.map(h=>{ const v = m.get(h, entryComp(h)); return v!=null && isFinite(v) ? v : null });
+  const v = vals.filter(x=>x!=null);
+  if(v.length<2){
+    $('#chart').innerHTML='<text x="160" y="95" fill="#8a97a8" font-size="12" text-anchor="middle">Salve 2 medições para ver o gráfico</text>';
+    $('#chartStat').innerHTML=''; $('#chartLegend').innerHTML=''; return;
+  }
+  // média móvel de 7 dias (todas as medições dos 7 dias anteriores a cada ponto)
+  const avg = pts.map((h,i)=>{ if(vals[i]==null) return null; let s=0,n=0;
+    for(let j=0;j<=i;j++) if(vals[j]!=null && pts[j].t >= h.t-7*DAY){ s+=vals[j]; n++ } return n ? s/n : null });
+  const all = v.concat(avg.filter(x=>x!=null));
+  let mn=Math.min(...v), mx=Math.max(...v); const amn=Math.min(...all), amx=Math.max(...all);
+  const span = amx-amn < 1 ? 1 : amx-amn, lo = amn-span*0.15, hi = amx+span*0.15;
+  const toXY = arr=>arr.map((y,i)=> y==null?null:[P+i*(W-2*P)/(arr.length-1), H-P-(y-lo)/(hi-lo)*(H-2*P)]).filter(Boolean);
+  const path = xy=>xy.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+  const xy = toXY(vals), xa = toXY(avg), d = path(xy);
+  const area = d + ` L${xy[xy.length-1][0].toFixed(1)} ${H} L${xy[0][0].toFixed(1)} ${H} Z`;
+  let grid=''; for(let i=0;i<4;i++){ const y=P+i*(H-2*P)/3; grid+=`<line x1="0" x2="${W}" y1="${y}" y2="${y}" stroke="#232d3a" stroke-dasharray="3 4"/>` }
+  const goal = chartKey==='w' ? profile.goalW : chartKey==='fat' ? profile.goalFat : null;
+  let goalLine = '';
+  if(goal!=null && goal>=lo && goal<=hi){ const gy = H-P-(goal-lo)/(hi-lo)*(H-2*P); goalLine = `<line x1="0" x2="${W}" y1="${gy}" y2="${gy}" stroke="#e8eef5" stroke-opacity=".5" stroke-width="1.2" stroke-dasharray="6 5" vector-effect="non-scaling-stroke"/>` }
+  $('#chart').innerHTML = grid + goalLine +
+    `<defs><linearGradient id="cg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${m.color}" stop-opacity=".22"/><stop offset="1" stop-color="${m.color}" stop-opacity="0"/></linearGradient></defs>`+
+    `<path d="${area}" fill="url(#cg)"/>`+
+    `<path d="${d}" fill="none" stroke="${m.color}" stroke-opacity=".45" stroke-width="1.6" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`+
+    `<path d="${path(xa)}" fill="none" stroke="${m.color}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`;
+  const dec = chartKey==='visceral' ? 0 : 1, fmt = x=>x.toFixed(dec).replace('.',',');
+  const a0 = avg.find(x=>x!=null), a1 = [...avg].reverse().find(x=>x!=null);
+  const delta = a1-a0, eq = Math.abs(delta)<0.05, cls = eq ? 'eq' : ((delta<0)===m.lower ? 'good' : 'bad');
+  $('#chartStat').innerHTML =
+    `<div>Tendência<br><b class="d ${cls}" style="font-size:14px">${eq?'=':(delta<0?'▼ ':'▲ ')+fmt(Math.abs(delta))}${eq?'':m.unit}</b></div>`+
+    `<div>Média 7 dias<br><b>${fmt(a1)}${m.unit}</b></div>`+
+    `<div>Mín – máx<br><b>${fmt(mn)}–${fmt(mx)}</b></div>`+
+    `<div style="text-align:right">Atual<br><b>${fmt(v[v.length-1])}${m.unit}</b></div>`;
+  $('#chartLegend').innerHTML = `<span style="--c:${m.color}">média de 7 dias</span><span style="--c:${m.color};opacity:.5">medições</span>${goalLine?'<span style="--c:#e8eef5;opacity:.6">meta</span>':''}`;
+}
+
+$('#btnClear').onclick = ()=>{ $('#log').innerHTML='' };
+$('#btnCopy').onclick = async ()=>{ try{ await navigator.clipboard.writeText($('#log').innerText); toast('Log copiado') }catch(e){ toast('Não foi possível copiar') } };
+
+/* ---------- instalação como app (PWA) ---------- */
+if(!NATIVE && 'serviceWorker' in navigator && location.protocol==='https:'){
+  window.addEventListener('load', ()=>{ try{ navigator.serviceWorker.register('sw.js').catch(()=>{}) }catch(e){} });
+}
+let installPrompt = null;
+window.addEventListener('beforeinstallprompt', e=>{
+  e.preventDefault(); installPrompt = e;
+  if(!$('#btnInstall')){
+    const b = document.createElement('button');
+    b.id='btnInstall'; b.className='btn'; b.style.cssText='width:100%;margin-top:10px';
+    b.textContent='📲 Instalar como app';
+    b.onclick = async ()=>{ installPrompt.prompt(); await installPrompt.userChoice; installPrompt=null; b.remove() };
+    $('#btnRead').parentElement.after(b);
+  }
+});
+window.addEventListener('appinstalled', ()=>{ toast('App instalado'); const b=$('#btnInstall'); if(b) b.remove() });
+
+/* ---------- init ---------- */
+renderProfile(); renderMetrics(); loadImp(); bleSupportNote(); renderGoals(); renderRemind(); renderScaleCard(); renderWatch(); renderHC();
+if(NATIVE){
+  syncHealth(false);
+  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') syncHealth(false) });
+}
+if(decoder) $('#calInfo').textContent = `Peso: byte ${decoder.off}, ${decoder.end.toUpperCase()}, ÷${decoder.div}`;
+</script>
+</body>
+</html>

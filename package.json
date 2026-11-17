@@ -1,0 +1,18 @@
+{
+  "name": "bio-balanca",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Bio Balança: app web e Android para balança Bluetooth e Galaxy Watch",
+  "scripts": {
+    "www": "node setup-android.mjs www",
+    "android:setup": "node setup-android.mjs android"
+  },
+  "dependencies": {
+    "@capacitor-community/bluetooth-le": "8.3.0",
+    "@capacitor/android": "8.6.2",
+    "@capacitor/core": "8.6.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.6.2"
+  }
+}
