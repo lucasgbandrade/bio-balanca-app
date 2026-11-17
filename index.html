@@ -112,8 +112,9 @@ nav svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;st
 .bodyv .bi b{color:var(--text)}
 .lvl{transition:transform 1.2s cubic-bezier(.2,.8,.2,1)}
 .bodyv{touch-action:pan-y;user-select:none;-webkit-user-select:none}
-.bodyv.in-l{animation:inL .28s ease}
-.bodyv.in-r{animation:inR .28s ease}
+.bodyv.in-l,.chart.in-l{animation:inL .28s ease}
+.bodyv.in-r,.chart.in-r{animation:inR .28s ease}
+.chart{touch-action:pan-y;user-select:none;-webkit-user-select:none}
 @keyframes inL{from{transform:translateX(48px);opacity:0}}
 @keyframes inR{from{transform:translateX(-48px);opacity:0}}
 .dots{display:flex;justify-content:center;gap:6px;margin-top:10px}
@@ -213,6 +214,7 @@ nav svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;st
     <div class="chart"><svg id="chart" viewBox="0 0 320 180" preserveAspectRatio="none"></svg>
       <div class="cstat" id="chartStat"></div>
       <div class="legend" id="chartLegend" style="margin-top:8px"></div>
+      <div class="dots" id="chartDots"></div>
     </div>
     <h2>Medições</h2>
     <p class="small" style="margin:-4px 0 10px">Toque numa medição para ver a composição completa.</p>
@@ -376,9 +378,10 @@ document.querySelectorAll('#segSex button').forEach(b=>b.onclick=()=>{profile.se
 $('#pAge').oninput = e=>{profile.age=+e.target.value||profile.age;saveProfile()};
 $('#pHeight').oninput = e=>{profile.height=+e.target.value||profile.height;saveProfile()};
 function saveProfile(){ store.set('profile',profile); renderProfile(); renderMetrics(); renderCompare(); renderGoals(); renderRemind() }
+function scaleHist(){ return history.filter(h=>h.src!=='watch') }
 function latestState(){
-  if(cur.weight && cur.final) return {w:cur.weight, c:fullComp(cur.weight, cur.impedance, profile, cur.algo)};
-  const h = history[0]; return h ? {w:h.w, c:entryComp(h), t:h.t} : null;
+  const h = scaleHist()[0] || history[0];
+  return h ? {w:h.w, c:fullComp(h.w, null, h.p || profile), t:h.t, h} : null;
 }
 const num = v=>{ const n = parseFloat(String(v).replace(',','.')); return n>0 ? n : null };
 $('#gW').onchange = e=>{ profile.goalW = num(e.target.value); const s=latestState(); profile.goalStartW = s ? s.w : null; saveProfile() };
@@ -511,7 +514,7 @@ function mergeHealth(recs){
   return added;
 }
 function afterHistoryChange(){
-  renderWatch(); renderCompare(); renderGoals(); renderRemind(); renderMetrics();
+  renderWatch(); renderCompare(); renderGoals(); renderRemind(); renderMetrics(); renderIdleGauge();
   if($('#v-hist').classList.contains('active')) renderHistory();
 }
 function lastWatch(){ return history.find(h=>h.src==='watch') }
@@ -556,7 +559,7 @@ $('#fileImport').onchange = async e=>{
     list.forEach(h=>{ if(h && typeof h.t==='number' && typeof h.w==='number' && !have.has(h.t)){ history.push(h); have.add(h.t); added++ } });
     history.sort((a,b)=>b.t-a.t); store.set('history', history);
     if(data.profile && !store.get('profile', null)){ profile = Object.assign(profile, data.profile); saveProfile() }
-    renderCompare(); renderGoals(); renderRemind();
+    renderCompare(); renderGoals(); renderRemind(); renderMetrics(); renderIdleGauge();
     toast(added ? `${added} medições importadas` : 'Nenhuma medição nova no arquivo');
   }catch(err){ toast('Arquivo de backup inválido') }
 };
@@ -644,8 +647,8 @@ function renderMetrics(){
   renderBody('#bodyMain', lw ? lw.c : null, profile, 'main', 'Meça a composição corporal no relógio para ver aqui.');
   // análise: peso atual da balança + gordura e massa magra do relógio
   let a = lw ? {...lw.c} : null;
-  if(cur.weight && cur.final){ a = Object.assign(a || {}, fullComp(cur.weight, null, profile)) }
-  else if(!a && history[0]) a = fullComp(history[0].w, null, history[0].p || profile);
+  const ls = latestState();
+  if(ls) a = Object.assign(a || {}, fullComp(ls.w, null, profile));
   renderAnalysis(a);
 }
 function metricsHTML(w, R, algo, ex, p, cIn){
@@ -722,7 +725,7 @@ function analysisHTML(c, p){
   return html;
 }
 function renderAnalysis(c){
-  $('#analysis').innerHTML = c ? analysisHTML(c, profile) : `<div class="note" style="margin:0">${cur.weight ? 'Aguardando o peso final…' : 'Aparece aqui depois da pesagem.'}</div>`;
+  $('#analysis').innerHTML = c ? analysisHTML(c, profile) : `<div class="note" style="margin:0">Aparece aqui depois da primeira pesagem salva.</div>`;
 }
 
 /* ---------- metas ---------- */
@@ -755,15 +758,16 @@ function renderSummary(){
   const el = $('#summary');
   $('#sumChips').innerHTML = [7,30,90].map(d=>`<button class="chip ${d===sumDays?'on':''}" data-d="${d}">${d} dias</button>`).join('');
   $('#sumChips').querySelectorAll('.chip').forEach(b=>b.onclick=()=>{ sumDays=+b.dataset.d; store.set('sumDays',sumDays); renderSummary() });
-  if(history.length<2){ el.innerHTML = '<div class="note" style="margin:0">Salve pelo menos 2 medições para ver o resumo.</div>'; return }
-  const last = history[0], since = last.t - sumDays*DAY;
-  const win = history.filter(h=>h.t>=since);
+  const sh = scaleHist();   // peso: só pesagens salvas da balança
+  if(sh.length<2){ el.innerHTML = '<div class="note" style="margin:0">Salve pelo menos 2 pesagens para ver o resumo.</div>'; return }
+  const last = sh[0], since = last.t - sumDays*DAY;
+  const win = sh.filter(h=>h.t>=since);
   let first = win[win.length-1];
-  if(first===last) first = history.find(h=>h.t<since);
+  if(first===last) first = sh.find(h=>h.t<since);
   if(!first){ el.innerHTML = '<div class="note" style="margin:0">Ainda não há medições suficientes neste período.</div>'; return }
   const a = entryComp(first), b = entryComp(last), f = v=>Math.abs(v).toFixed(1).replace('.',',');
-  const days = Math.max(1, Math.round((last.t-first.t)/DAY)), n = history.filter(h=>h.t>=first.t).length;
-  const ws = history.filter(h=>h.src==='watch' && h.t>=first.t && h.t<=last.t);
+  const days = Math.max(1, Math.round((last.t-first.t)/DAY)), n = sh.filter(h=>h.t>=first.t).length;
+  const ws = history.filter(h=>h.src==='watch' && h.t>=first.t);   // composição: só o relógio
   const wa = ws.length>=2 ? entryComp(ws[ws.length-1]) : null, wb = ws.length>=2 ? entryComp(ws[0]) : null;
   const dW = b.w-a.w, dFat = (wa && wb && wa.fatKg!=null && wb.fatKg!=null) ? wb.fatKg-wa.fatKg : null, dLean = (dFat!=null && wa.ffm!=null && wb.ffm!=null) ? wb.ffm-wa.ffm : null;
   let txt = (Math.abs(dW)<0.1 ? `Em ${days} dias seu peso ficou <b>estável</b>.`
@@ -897,7 +901,7 @@ function showWeight(w, final){
   $('#arc').setAttribute('stroke-dasharray', `${Math.min(405, w/150*405)} 541`);
   const st = $('#wstate');
   st.className = 'wstate ' + (final?'final':'live');
-  st.textContent = final ? (cur.impedance ? 'Medição completa ✓' : 'Peso estável ✓') : 'Medindo…';
+  st.textContent = final ? (cur.savedT ? 'Peso final · salvo ✓' : 'Peso final · não salvo') : 'Medindo…';
   if(!final){ cur.savedT = null; $('#btnSave').textContent = 'Salvar' }
   $('#btnSave').disabled = !final || !!cur.savedT;
   renderMetrics(); renderCompare(); renderGoals(); $('#remind').innerHTML='';
@@ -921,7 +925,7 @@ function entryComp(h){
   c.src = 'watch';
   return c;
 }
-function compareHTML(c, prev, refT){
+function compareHTML(c, prev, refT, title){
   const pc = entryComp(prev);
   const rows = [
     ['Peso', c.w, prev.w, 'kg', true],
@@ -935,7 +939,9 @@ function compareHTML(c, prev, refT){
   const when = refT ? (days<=0 ? 'mesmo dia' : days===1 ? '1 dia antes' : `${days} dias antes`)
                     : (days<=0 ? 'hoje' : days===1 ? 'ontem' : `há ${days} dias`);
   const f = v=>Math.abs(v).toFixed(1).replace('.',',');
-  return `<div class="cmp"><div class="hd">Comparado com ${new Date(prev.t).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})} (${when})</div><div class="cols">`+
+  const dd = t=>new Date(t).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+  const hd = title ? `${title} ${dd(refT)} × ${dd(prev.t)} (${when})` : `Comparado com ${dd(prev.t)} (${when})`;
+  return `<div class="cmp"><div class="hd">${hd}</div><div class="cols">`+
     rows.map(([k,now,old,u,lowerBetter])=>{
       const d = now-old, eq = Math.abs(d)<0.05;
       const cls = eq ? 'eq' : ((d<0)===lowerBetter ? 'good' : 'bad');
@@ -943,11 +949,20 @@ function compareHTML(c, prev, refT){
     }).join('') + '</div></div>';
 }
 function renderCompare(){
-  const el = $('#cmp');
-  if(!cur.weight){ el.innerHTML=''; return }
-  const prev = history.find(h=>h.t!==cur.savedT);
-  if(!prev){ el.innerHTML='<div class="cmp"><div class="hd" style="margin:0;text-align:center">Primeira medição: salve para comparar nas próximas.</div></div>'; return }
-  el.innerHTML = compareHTML(fullComp(cur.weight, cur.impedance, profile, cur.algo), prev);
+  const el = $('#cmp'), sh = scaleHist();
+  if(!sh.length){ el.innerHTML=''; return }
+  const last = sh[0], prev = sh[1];
+  if(!prev){ el.innerHTML='<div class="cmp"><div class="hd" style="margin:0;text-align:center">Salve mais uma pesagem para ver a comparação.</div></div>'; return }
+  el.innerHTML = compareHTML(fullComp(last.w, null, last.p || profile), prev, last.t, 'Pesagens salvas');
+}
+/* sem leitura em andamento, o medidor mostra a última pesagem salva */
+function renderIdleGauge(){
+  if(cur.weight) return;
+  const ls = latestState();
+  $('#wval').textContent = ls ? ls.w.toFixed(1).replace('.',',') : '--,-';
+  $('#arc').setAttribute('stroke-dasharray', `${ls ? Math.min(405, ls.w/150*405) : 0} 541`);
+  const st = $('#wstate'); st.className = 'wstate';
+  if(!scan) st.textContent = ls ? `Última pesagem salva · ${new Date(ls.t).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}` : 'Conecte a balança';
 }
 function onWeight(w, opts={}){
   if(!(w>2 && w<300)) return;
@@ -1221,7 +1236,7 @@ function stopScan(){
   navigator.bluetooth && navigator.bluetooth.removeEventListener('advertisementreceived', onScanAdv);
   $('#scanBox').style.display='none'; setPill('','Desconectado');
   $('#btnRead').textContent = 'Ler balança'; $('#btnScan').textContent = 'Buscar por sinal';
-  renderScaleCard();
+  renderScaleCard(); renderIdleGauge();
 }
 /* Bluetooth nativo (app Android): mesmo tratamento dos anúncios da versão web */
 let nativeListener = null;
@@ -1320,14 +1335,13 @@ function saveMeasurement(auto){
   if(!cur.weight || cur.savedT) return;
   const c = fullComp(cur.weight, null, profile);
   const t = Date.now();
-  history.unshift({t, w:+cur.weight.toFixed(2), r:cur.impedance||null, fat: cur.extra.fat ?? (c.fat!=null?+c.fat.toFixed(1):null), bmi:+c.bmi.toFixed(1),
-    muscle: c.muscle!=null?+c.muscle.toFixed(1):null, water: c.water!=null?+c.water.toFixed(1):null, visceral: c.visceral ?? null,
-    algo: cur.algo || null, p: {...profile}});
+  history.unshift({t, w:+cur.weight.toFixed(2), r:null, bmi:+c.bmi.toFixed(1), p: {...profile}});
   store.set('history', history);
   cur.savedT = t;
   $('#btnSave').disabled = true; $('#btnSave').textContent = 'Salvo ✓';
   toast(auto ? 'Medição salva automaticamente' : 'Medição salva');
-  renderCompare(); renderGoals();
+  $('#wstate').textContent = 'Peso final · salvo ✓';
+  renderCompare(); renderGoals(); renderMetrics(); renderRemind();
 }
 $('#btnSave').onclick = ()=>saveMeasurement(false);
 function renderHistory(){
@@ -1368,26 +1382,61 @@ function openDetail(i){
   $('#sheetDel').onclick = e=>{
     const b = e.currentTarget;
     if(!b.dataset.armed){ b.dataset.armed='1'; b.textContent='Toque de novo para confirmar'; return }
-    history.splice(i,1); store.set('history',history); closeDetail(); renderHistory(); renderCompare(); renderGoals(); renderWatch(); toast('Medição apagada');
+    history.splice(i,1); store.set('history',history); closeDetail(); renderHistory(); renderCompare(); renderGoals(); renderWatch(); renderMetrics(); renderIdleGauge(); toast('Medição apagada');
   };
 }
 function closeDetail(){ $('#sheet').classList.remove('open'); document.body.style.overflow='' }
 $('#sheetBg').onclick = closeDetail;
 
 const CHART = {
-  w:       {label:'Peso', unit:'kg', color:'#3ee6b5', lower:true,  get:(h,c)=>h.w},
+  w:       {label:'Peso', unit:'kg', color:'#3ee6b5', lower:true,  get:(h,c)=>h.src==='watch' ? null : h.w},
   fat:     {label:'Gordura', unit:'%', color:'#ffb547', lower:true,  get:(h,c)=>c.fat},
   muscle:  {label:'Músculo', unit:'kg', color:'#ff6b7a', lower:false, get:(h,c)=>c.muscle},
   water:   {label:'Água', unit:'%', color:'#4aa8ff', lower:false, get:(h,c)=>c.water},
   bmi:     {label:'IMC', unit:'', color:'#b48cff', lower:true,  get:(h,c)=>c.bmi},
 };
 let chartKey = store.get('chartKey','w');
+/* deslizar o dedo no gráfico troca de indicador */
+let chartSlide = 0;
+function chartSwipeSetup(){
+  const box = document.querySelector('.chart');
+  if(box._swipe) return; box._swipe = true;
+  let sx=null, sy=0, dx=0;
+  box.addEventListener('pointerdown', e=>{ sx=e.clientX; sy=e.clientY; dx=0; box.style.transition='none'; try{ box.setPointerCapture(e.pointerId) }catch(_){} });
+  box.addEventListener('pointermove', e=>{
+    if(sx==null) return;
+    dx = e.clientX-sx;
+    if(Math.abs(dx) > Math.abs(e.clientY-sy)) box.style.transform = `translateX(${dx*0.35}px)`;
+  });
+  box.addEventListener('pointerup', ()=>{
+    if(sx==null) return; sx=null;
+    box.style.transition='transform .2s'; box.style.transform='';
+    if(Math.abs(dx) > 50){
+      const ks = Object.keys(CHART), dir = dx<0 ? 1 : -1;
+      chartKey = ks[(ks.indexOf(chartKey)+dir+ks.length)%ks.length];
+      store.set('chartKey', chartKey); chartSlide = dir; drawChart();
+    }
+  });
+  box.addEventListener('pointercancel', ()=>{ sx=null; box.style.transition='transform .2s'; box.style.transform='' });
+}
 function drawChart(){
   const pts = history.slice(0,60).reverse(), W=320, H=180, P=14;
   if(!CHART[chartKey]) chartKey='w';
   const m = CHART[chartKey];
-  $('#chartChips').innerHTML = Object.keys(CHART).map(k=>`<button class="chip ${k===chartKey?'on':''}" data-k="${k}">${CHART[k].label}</button>`).join('');
-  $('#chartChips').querySelectorAll('.chip').forEach(b=>b.onclick=()=>{ chartKey=b.dataset.k; store.set('chartKey',chartKey); drawChart() });
+  const ks = Object.keys(CHART);
+  $('#chartChips').innerHTML = ks.map(k=>`<button class="chip ${k===chartKey?'on':''}" data-k="${k}">${CHART[k].label}</button>`).join('');
+  $('#chartChips').querySelectorAll('.chip').forEach(b=>b.onclick=()=>{
+    const dir = ks.indexOf(b.dataset.k) >= ks.indexOf(chartKey) ? 1 : -1;
+    chartKey=b.dataset.k; store.set('chartKey',chartKey); chartSlide=dir; drawChart();
+  });
+  const onChip = $('#chartChips .chip.on'), row = $('#chartChips');
+  if(onChip) row.scrollLeft = onChip.offsetLeft - row.offsetLeft - 16;
+  $('#chartDots').innerHTML = ks.map(k=>`<i class="${k===chartKey?'on':''}"></i>`).join('');
+  const box = document.querySelector('.chart');
+  box.classList.remove('in-l','in-r');
+  if(chartSlide){ void box.offsetWidth; box.classList.add(chartSlide>0 ? 'in-l' : 'in-r') }
+  chartSlide = 0;
+  chartSwipeSetup();
   const vals = pts.map(h=>{ const v = m.get(h, entryComp(h)); return v!=null && isFinite(v) ? v : null });
   const v = vals.filter(x=>x!=null);
   if(v.length<2){
@@ -1445,7 +1494,7 @@ window.addEventListener('beforeinstallprompt', e=>{
 window.addEventListener('appinstalled', ()=>{ toast('App instalado'); const b=$('#btnInstall'); if(b) b.remove() });
 
 /* ---------- init ---------- */
-renderProfile(); renderMetrics(); loadImp(); bleSupportNote(); renderGoals(); renderRemind(); renderScaleCard(); renderWatch(); renderHC();
+renderProfile(); renderMetrics(); renderCompare(); renderIdleGauge(); loadImp(); bleSupportNote(); renderGoals(); renderRemind(); renderScaleCard(); renderWatch(); renderHC();
 if(NATIVE){
   syncHealth(false);
   document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') syncHealth(false) });

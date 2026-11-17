@@ -23,7 +23,8 @@ App web que lê o peso de balanças de bioimpedância Bluetooth direto do navega
 - **Backup:** exportar e importar o histórico (.json) e exportar planilha (.csv).
 - **Conexões:** área com a balança salva, busca por sinal e pareamento.
 - **Samsung Galaxy Watch (app Android):** a composição corporal vem só do relógio. As medições de bioimpedância chegam sozinhas pelo Health Connect, entram no histórico com o selo ⌚ e aparecem em destaque na tela Medir. A balança fornece apenas peso e IMC.
-- **Deslizar entre indicadores:** em "Seu corpo", passe o dedo para a esquerda ou para a direita para trocar entre água, gordura, músculo, proteína e ossos.
+- **Deslizar entre indicadores:** em "Seu corpo" e no gráfico de evolução, passe o dedo para a esquerda ou para a direita para trocar de indicador.
+- **Relatório só com medições salvas:** comparação, metas, análise e resumo usam apenas pesagens salvas; uma leitura ainda não salva aparece só no medidor, marcada como "não salvo".
 
 ## Compatibilidade
 
