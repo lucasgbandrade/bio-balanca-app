@@ -111,6 +111,15 @@ nav svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;st
 .bodyv .bi{font-size:12.5px;color:var(--muted);line-height:1.5;margin-top:10px}
 .bodyv .bi b{color:var(--text)}
 .lvl{transition:transform 1.2s cubic-bezier(.2,.8,.2,1)}
+.bodyv{touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.bodyv.in-l{animation:inL .28s ease}
+.bodyv.in-r{animation:inR .28s ease}
+@keyframes inL{from{transform:translateX(48px);opacity:0}}
+@keyframes inR{from{transform:translateX(-48px);opacity:0}}
+.dots{display:flex;justify-content:center;gap:6px;margin-top:10px}
+.dots i{width:7px;height:7px;border-radius:50%;background:var(--line);transition:.2s}
+.dots i.on{width:20px;border-radius:4px;background:var(--text)}
+.swipehint{text-align:center;font-size:11.5px;color:var(--muted);margin-top:6px}
 .wave{animation:wave 2.2s linear infinite}
 @keyframes wave{to{transform:translateX(-25px)}}
 .cstat{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted);margin-top:8px}
@@ -232,19 +241,12 @@ nav svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;st
     <div class="acard" id="watchCard">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
         <div class="t" style="font-size:18px;margin:0">⌚ Samsung Galaxy Watch</div>
-        <span class="tag ok" id="watchTag" style="margin:0">Importação</span>
+        <span class="tag" id="watchTag" style="margin:0">App Android</span>
       </div>
-      <div class="s">O relógio mede a bioimpedância de verdade. Traga as medições dele para o histórico: gordura, massa magra, músculo esquelético, água e metabolismo medidos, junto com o peso da balança.</div>
+      <div class="s">O relógio mede a bioimpedância de verdade. As medições dele (gordura, massa magra, água, ossos e metabolismo) chegam sozinhas pelo Health Connect e entram no histórico junto com o peso da balança.</div>
       <div id="watchStatus" class="s" style="margin-top:8px"></div>
       <div id="watchNative"></div>
     </div>
-    <label class="btn primary" style="display:block;text-align:center;width:100%">⌚ Importar do Samsung Health<input type="file" id="fileWatch" accept=".csv,.json,text/csv,application/json" multiple hidden></label>
-    <div class="note" style="line-height:1.6">
-      <b>1. Meça no relógio:</b> abra o Samsung Health no relógio → <b>Composição corporal</b> → <b>Medir</b>, com o dedo médio e o anelar nas duas teclas, em jejum e com os braços afastados do corpo.<br>
-      <b>2. Exporte no celular:</b> no app Samsung Health, abra o menu → <b>Configurações</b> → <b>Baixar dados pessoais</b>. Os arquivos vão para a pasta <b>Downloads → Samsung Health</b>.<br>
-      <b>3. Importe aqui:</b> toque no botão acima e escolha o arquivo que começa com <span class="mono">com.samsung.health.weight</span> (ou <span class="mono">body_composition</span>), em .csv ou .json.
-    </div>
-    <p class="small" style="line-height:1.5">No app Android do Bio Balança as medições chegam sozinhas pelo Health Connect. A importação do arquivo continua disponível como alternativa, por exemplo na versão web.</p>
 
     <h2>Outras integrações</h2>
     <div class="acard">
@@ -425,73 +427,6 @@ function renderRemind(){
   el.innerHTML = `<div class="note warn" style="margin-top:4px">⏰ <b>Hora de se pesar.</b> Sua última pesagem foi ${gap===1?'ontem':`há ${gap} dias`}.</div>`;
 }
 
-/* ---------- Samsung Health (Galaxy Watch) ---------- */
-function parseCSVLine(line){
-  const out=[]; let cur='', q=false;
-  for(let i=0;i<line.length;i++){ const ch=line[i];
-    if(q){ if(ch==='"'){ if(line[i+1]==='"'){cur+='"';i++} else q=false } else cur+=ch }
-    else if(ch==='"') q=true; else if(ch===','){ out.push(cur); cur='' } else cur+=ch;
-  }
-  out.push(cur); return out;
-}
-function shTime(v, off){
-  if(v==null || v==='') return null;
-  if(/^\d{12,}$/.test(String(v))) return +v;                       // milissegundos
-  const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
-  if(!m) return null;
-  return Date.UTC(+m[1], m[2]-1, +m[3], +m[4], +m[5], +(m[6]||0)); // Samsung grava start_time em UTC
-}
-function shRecords(text, name){
-  const recs = [];
-  const t = text.replace(/^﻿/,'').trim();
-  if(t.startsWith('[') || t.startsWith('{')){
-    let data = JSON.parse(t); if(!Array.isArray(data)) data = data.data || data.records || [data];
-    data.forEach(o=>{ const r={}; Object.keys(o).forEach(k=>r[k.split('.').pop().toLowerCase()] = o[k]); recs.push(r) });
-    return recs;
-  }
-  const lines = t.split(/\r?\n/);
-  const hi = lines.findIndex(l=>/start_time|create_time/i.test(l) && /weight|body_fat/i.test(l));
-  if(hi<0) return recs;
-  const head = parseCSVLine(lines[hi]).map(h=>h.trim().split('.').pop().toLowerCase());
-  for(let i=hi+1;i<lines.length;i++){
-    if(!lines[i].trim()) continue;
-    const cols = parseCSVLine(lines[i]), r = {};
-    head.forEach((h,k)=>{ if(h && r[h]==null) r[h] = cols[k] });
-    recs.push(r);
-  }
-  return recs;
-}
-function shToEntry(r){
-  const n = k=>{ const v = parseFloat(String(r[k]??'').replace(',','.')); return isFinite(v) && v>0 ? v : null };
-  const t = shTime(r.start_time ?? r.create_time, r.time_offset);
-  const fat = n('body_fat'), fatKg = n('body_fat_mass'), skeletal = n('skeletal_muscle_mass'), waterL = n('total_body_water');
-  if(!t || (fat==null && fatKg==null && skeletal==null)) return null;   // só medições de composição
-  let w = n('weight');
-  if(!w){ const prev = history.find(h=>h.t<=t) || history[history.length-1]; w = prev ? prev.w : null }
-  if(!w) return null;
-  const h = n('height');
-  return {t, w:+w.toFixed(2), src:'watch', r:null,
-    m:{fat, fatKg, ffm:n('fat_free_mass'), skeletal, waterL, bmr:n('basal_metabolic_rate')},
-    p:{...profile, ...(h ? {height:Math.round(h)} : {})}};
-}
-$('#fileWatch').onchange = async e=>{
-  const files = [...e.target.files]; e.target.value=''; if(!files.length) return;
-  let added = 0, found = 0, bad = 0;
-  for(const f of files){
-    try{
-      shRecords(await f.text(), f.name).forEach(r=>{
-        const en = shToEntry(r); if(!en) return; found++;
-        if(history.some(h=>Math.abs(h.t-en.t)<60000 && h.src==='watch')) return;
-        history.push(en); added++;
-      });
-    }catch(err){ bad++ }
-  }
-  history.sort((a,b)=>b.t-a.t); store.set('history', history);
-  renderWatch(); renderCompare(); renderGoals(); renderRemind(); renderMetrics();
-  if(added) toast(`${added} medições do relógio importadas`);
-  else if(found) toast('Essas medições do relógio já estavam no histórico');
-  else toast(bad ? 'Não consegui ler esse arquivo' : 'Nenhuma medição de composição corporal no arquivo');
-};
 /* Health Connect (app Android): sincronização automática */
 let hcState = null, hcBusy = false;
 async function hcRefresh(){
@@ -502,11 +437,12 @@ async function hcRefresh(){
 function renderHC(){
   const el = $('#watchNative'); if(!el) return;
   if(!NATIVE){
-    el.innerHTML = '<div class="s" style="margin-top:8px">📲 No app Android do Bio Balança as medições do relógio chegam sozinhas, pelo Health Connect.</div>';
+    el.innerHTML = '<div class="s" style="margin-top:8px">📲 A sincronização com o relógio funciona no app Android do Bio Balança, que lê o Health Connect. O navegador não tem acesso a esses dados.</div>';
     return;
   }
   const st = hcState || {}, last = store.get('hcLast', null);
   $('#watchTag').textContent = st.grantedAny ? 'Automático' : 'Configurar';
+  $('#watchTag').className = 'tag ' + (st.grantedAny ? 'ok' : 'mid');
   if(!hcState) el.innerHTML = '<div class="s" style="margin-top:8px">Verificando o Health Connect…</div>';
   else if(!st.available) el.innerHTML = `<div class="s" style="margin-top:8px">${st.needsUpdate ? 'O Health Connect precisa ser atualizado.' : 'O Health Connect não está instalado neste celular.'}</div>
     <button class="btn" id="hcOpen" style="width:100%;margin-top:10px">${st.needsUpdate ? 'Atualizar' : 'Instalar'} o Health Connect</button>`;
@@ -583,8 +519,8 @@ function renderWatch(){
   const el = $('#watchStatus'); if(!el) return;
   const all = history.filter(h=>h.src==='watch'), last = all[0];
   el.innerHTML = last
-    ? `<b style="color:var(--text)">${all.length} ${all.length===1?'medição importada':'medições importadas'}</b>. Última: ${new Date(last.t).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}.`
-    : 'Nenhuma medição importada ainda.';
+    ? `<b style="color:var(--text)">${all.length} ${all.length===1?'medição recebida':'medições recebidas'}</b>. Última: ${new Date(last.t).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}.`
+    : 'Nenhuma medição do relógio recebida ainda.';
   // destaque da última medição do relógio na tela Medir
   const card = $('#watchMain'); if(!card) return;
   if(!last){ card.innerHTML=''; return }
@@ -890,7 +826,7 @@ function bodySVG(m, v, uid){
     <g fill="#18202b">${SHAPES}</g><g clip-path="url(#clip-${uid})">${inner}</g>
     <g fill="none" stroke="#2c3846" stroke-width="1">${SHAPES}</g></svg>`;
 }
-let bodyKey = store.get('bodyKey','water');
+let bodyKey = store.get('bodyKey','water'), bodySlide = 0;
 const bodySig = {};
 function renderBody(sel, c, p, uid, emptyMsg){
   const el = $(sel); if(!el) return;
@@ -913,12 +849,42 @@ function renderBody(sel, c, p, uid, emptyMsg){
       ${r ? `<span class="tag ${r[0]}" style="margin-top:8px">${r[1]}</span>` : ''}
       <div class="bi">${ideal ? `Faixa ideal: <b>${ideal}</b><br>` : ''}${m.info}</div>`;
   }
-  el.innerHTML = chips + `<div class="bodyv">${bodySVG(m, v, uid)}<div class="bt">${text}</div></div>`;
-  el.querySelectorAll('.chip').forEach(b=>b.onclick=()=>{
-    bodyKey = b.dataset.k; store.set('bodyKey', bodyKey);
-    Object.keys(bodySig).forEach(k=>bodySig[k]=null);
+  const keys = avail.length ? avail : Object.keys(BODY);
+  const dots = keys.length>1 ? `<div class="dots">${keys.map(k=>`<i class="${k===key?'on':''}"></i>`).join('')}</div>
+    ${store.get('swiped',false) ? '' : '<div class="swipehint">← deslize para ver os outros →</div>'}` : '';
+  const anim = bodySlide>0 ? ' in-l' : bodySlide<0 ? ' in-r' : ''; bodySlide = 0;
+  el.innerHTML = chips + `<div class="bodyv${anim}">${bodySVG(m, v, uid)}<div class="bt">${text}</div></div>` + dots;
+  const go = (k, dir)=>{
+    if(!k || k===key) return;
+    bodyKey = k; store.set('bodyKey', bodyKey); bodySlide = dir;
+    Object.keys(bodySig).forEach(x=>bodySig[x]=null);
     renderBody(sel, c, p, uid, emptyMsg);
+  };
+  el.querySelectorAll('.chip').forEach(b=>b.onclick=()=>{
+    const ni = keys.indexOf(b.dataset.k), ci = keys.indexOf(key);
+    go(b.dataset.k, ni>=ci ? 1 : -1);
   });
+  // deslizar o dedo para a esquerda/direita troca de indicador
+  const box = el.querySelector('.bodyv');
+  let sx=null, sy=0, dx=0;
+  box.addEventListener('pointerdown', e=>{ sx=e.clientX; sy=e.clientY; dx=0; box.style.transition='none'; try{ box.setPointerCapture(e.pointerId) }catch(_){} });
+  box.addEventListener('pointermove', e=>{
+    if(sx==null) return;
+    dx = e.clientX-sx;
+    if(Math.abs(dx) > Math.abs(e.clientY-sy)) box.style.transform = `translateX(${dx*0.35}px)`;
+  });
+  const end = ()=>{
+    if(sx==null) return; sx=null;
+    box.style.transition='transform .2s'; box.style.transform='';
+    if(Math.abs(dx) > 50 && keys.length>1){
+      const i = keys.indexOf(key), dir = dx<0 ? 1 : -1;
+      store.set('swiped', true);
+      go(keys[(i+dir+keys.length)%keys.length], dir);
+    }
+  };
+  box.addEventListener('pointerup', end);
+  box.addEventListener('pointercancel', ()=>{ sx=null; box.style.transition='transform .2s'; box.style.transform='' });
+
   const on = el.querySelector('.chip.on'), row = el.querySelector('.chips');
   if(on && row) row.scrollLeft = on.offsetLeft - row.offsetLeft - 16;
   requestAnimationFrame(()=>requestAnimationFrame(()=>el.querySelectorAll('.lvl').forEach(g=>g.style.transform=`translateY(${g.dataset.y}px)`)));
