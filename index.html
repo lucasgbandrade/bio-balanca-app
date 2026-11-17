@@ -185,13 +185,13 @@ nav svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;st
     </div>
     <div id="bleNote"></div>
 
-    <h2>Seu corpo</h2>
+    <h2>Seu corpo <span id="compDate" style="text-transform:none;letter-spacing:0;font-weight:600"></span></h2>
     <div id="bodyMain"></div>
     <h2>Análise</h2>
     <div id="analysis"></div>
     <h2>Composição corporal</h2>
     <div class="grid" id="metrics"></div>
-    <p class="small" style="margin-top:12px;line-height:1.5">Os valores de composição são estimativas calculadas a partir do peso, da impedância e do seu perfil (fórmulas do app OKOK nas balanças OKOK; equação BIA de Sun et al., 2003 nas demais). Não substituem avaliação médica.</p>
+    <p class="small" style="margin-top:12px;line-height:1.5">A composição corporal vem das medições de bioimpedância do Galaxy Watch; a balança fornece só o peso. Massa óssea, massa muscular e proteína são estimadas a partir da massa magra medida pelo relógio. Não substituem avaliação médica.</p>
   </section>
 
   <!-- HISTÓRICO -->
@@ -380,7 +380,7 @@ function latestState(){
 }
 const num = v=>{ const n = parseFloat(String(v).replace(',','.')); return n>0 ? n : null };
 $('#gW').onchange = e=>{ profile.goalW = num(e.target.value); const s=latestState(); profile.goalStartW = s ? s.w : null; saveProfile() };
-$('#gFat').onchange = e=>{ profile.goalFat = num(e.target.value); const s=latestState(); profile.goalStartFat = s && s.c ? (s.c.fat ?? null) : null; saveProfile() };
+$('#gFat').onchange = e=>{ profile.goalFat = num(e.target.value); const w=watchComp(); profile.goalStartFat = w ? (w.c.fat ?? null) : null; saveProfile() };
 document.querySelectorAll('#segAuto button').forEach(b=>b.onclick=()=>{ profile.autoSave = b.dataset.v==='1'; saveProfile() });
 $('#remFreq').onchange = e=>{ profile.remFreq = e.target.value; saveProfile() };
 $('#remDay').onchange = e=>{ profile.remDay = +e.target.value; saveProfile() };
@@ -512,8 +512,17 @@ function renderHC(){
     <button class="btn" id="hcOpen" style="width:100%;margin-top:10px">${st.needsUpdate ? 'Atualizar' : 'Instalar'} o Health Connect</button>`;
   else if(!st.grantedAny) el.innerHTML = `<div class="s" style="margin-top:8px">Permita que o Bio Balança leia as medições do relógio. Depois disso elas chegam sozinhas sempre que você abrir o app.</div>
     <button class="btn primary" id="hcAuth" style="width:100%;margin-top:10px">Conectar ao Health Connect</button>`;
-  else el.innerHTML = `<div class="s" style="margin-top:8px">✅ <b style="color:var(--text)">Sincronização automática ligada.</b>${last ? ' Última verificação: '+new Date(last).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})+'.' : ''}</div>
+  else {
+    const info = store.get('hcInfo', null), n = info ? (info.counts.fat||0) : null;
+    const diag = info == null ? '' : n
+      ? `<div class="s" style="margin-top:6px">Encontrei <b style="color:var(--text)">${n} ${n===1?'medição':'medições'} de gordura</b> no Health Connect; a mais recente é de ${new Date(info.lastFat).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}.</div>`
+      : `<div class="note warn" style="margin:10px 0 0;line-height:1.6">O Health Connect não tem nenhuma medição de gordura corporal (só ${info.counts.weight||0} de peso). Confira:<br>
+         <b>1.</b> No Samsung Health: menu → <b>Configurações</b> → <b>Health Connect</b>, e permita que ele <b>grave</b> “Gordura corporal”, “Peso” e “Massa magra”.<br>
+         <b>2.</b> No app Health Connect: <b>Dados e acesso</b> → <b>Medidas corporais</b> → <b>Gordura corporal</b>. Suas medições do relógio precisam aparecer ali.<br>
+         <b>3.</b> O Health Connect só libera dados de até 30 dias antes de você dar a permissão. Faça uma <b>nova medição no relógio</b>, espere ela aparecer no Samsung Health do celular e toque em <b>Sincronizar agora</b>.</div>`;
+    el.innerHTML = `<div class="s" style="margin-top:8px">✅ <b style="color:var(--text)">Sincronização automática ligada.</b>${last ? ' Última verificação: '+new Date(last).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})+'.' : ''}</div>${diag}
     <div class="actions" style="margin:10px 0 0"><button class="btn primary" id="hcSync">Sincronizar agora</button><button class="btn" id="hcOpen">Abrir Health Connect</button></div>`;
+  }
   const o = $('#hcOpen'); if(o) o.onclick = ()=>HB.openSettings().catch(()=>toast('Não foi possível abrir o Health Connect'));
   const a = $('#hcAuth'); if(a) a.onclick = async ()=>{
     try{ hcState = await HB.authorize() }catch(e){ toast('Não foi possível pedir a permissão') }
@@ -527,9 +536,15 @@ async function syncHealth(manual){
   try{
     const st = await hcRefresh();
     if(!st || !st.available || !st.grantedAny){ if(manual) toast('Conecte o Health Connect primeiro'); return }
-    const last = store.get('hcLast', 0);
-    const res = await HB.read({since: last ? last - 3*DAY : Date.now() - 400*DAY});
-    const added = mergeHealth(res.records || []);
+    // sempre lê a janela inteira: o Samsung Health pode enviar medições antigas com atraso (duplicatas são ignoradas)
+    const res = await HB.read({since: Date.now() - 400*DAY});
+    const recs = res.records || [];
+    const counts = {}, srcs = {};
+    recs.forEach(r=>{ counts[r.type]=(counts[r.type]||0)+1; if(r.type==='fat') srcs[r.src]=1 });
+    const fats = recs.filter(r=>r.type==='fat').map(r=>r.t);
+    store.set('hcInfo', {t:Date.now(), counts, srcs:Object.keys(srcs), lastFat: fats.length ? Math.max(...fats) : null});
+    logText('health connect: '+JSON.stringify(counts)+' fontes '+Object.keys(srcs).join(','));
+    const added = mergeHealth(recs);
     store.set('hcLast', Date.now());
     if(added){ toast(`${added} ${added===1 ? 'medição nova' : 'medições novas'} do relógio`); afterHistoryChange() }
     else if(manual) toast('Nenhuma medição nova do relógio');
@@ -679,17 +694,23 @@ function rate(key, val, p){
   if(val<R[2]) return ['mid','Alto'];
   return ['hi','Muito alto'];
 }
+// A balança fornece só o peso: composição corporal vem apenas do relógio (bioimpedância real)
 function fullComp(w, R, p, algo){
   if(!w) return null;
-  const c = compose(w, R, p, algo); c.w = w;
-  if(c.muscle!=null && c.musclePct==null) c.musclePct = c.muscle/w*100;
-  return c;
+  return {w, bmi: w/Math.pow(p.height/100,2)};
 }
+function watchComp(){ const lw = lastWatch(); return lw ? {h:lw, c:entryComp(lw)} : null }
 function renderMetrics(){
-  const c = fullComp(cur.weight, cur.impedance, profile, cur.algo);
-  $('#metrics').innerHTML = metricsHTML(cur.weight, cur.impedance, cur.algo, cur.extra, profile);
-  renderBody('#bodyMain', cur.weight && cur.final ? c : null, profile, 'main', cur.weight ? 'Aguardando o peso final…' : 'Suba na balança para ver.');
-  renderAnalysis(cur.weight && cur.final ? c : null);
+  const lw = watchComp();
+  $('#compDate').textContent = lw ? '· ⌚ relógio, '+new Date(lw.h.t).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}) : '';
+  $('#metrics').innerHTML = lw ? metricsHTML(lw.h.w, null, null, {}, lw.h.p || profile, lw.c)
+    : '<div class="note" style="grid-column:1/-1;margin:0">Nenhuma medição do relógio ainda. Faça a medição de composição corporal no Galaxy Watch e ela aparece aqui.</div>';
+  renderBody('#bodyMain', lw ? lw.c : null, profile, 'main', 'Meça a composição corporal no relógio para ver aqui.');
+  // análise: peso atual da balança + gordura e massa magra do relógio
+  let a = lw ? {...lw.c} : null;
+  if(cur.weight && cur.final){ a = Object.assign(a || {}, fullComp(cur.weight, null, profile)) }
+  else if(!a && history[0]) a = fullComp(history[0].w, null, history[0].p || profile);
+  renderAnalysis(a);
 }
 function metricsHTML(w, R, algo, ex, p, cIn){
   const c = cIn || fullComp(w, R, p, algo) || {};
@@ -708,7 +729,7 @@ function metricsHTML(w, R, algo, ex, p, cIn){
     ['Metabolismo basal', null, ex.bmr ?? c.bmr, 'kcal', 0],
     ['Idade metabólica', null, c.metaAge, 'anos', 0],
     ['Impedância', null, R, 'Ω', 0],
-  ].filter(it=>!(it[2]==null && ['Músculo esquelético','Gordura visceral','Idade metabólica'].includes(it[0])));
+  ].filter(it=>it[2]!=null && isFinite(it[2]));
   const okNote = c.src==='watch'
     ? `<div class="note" style="grid-column:1/-1;border-color:rgba(62,230,181,.35)">⌚ <b>Medido pelo Galaxy Watch</b> (bioimpedância real). Massa óssea e proteína são estimadas a partir da massa magra.</div>`
     : algo==='okok' && R===600
@@ -789,7 +810,7 @@ function renderGoals(){
     return;
   }
   if(!s){ el.innerHTML=''; return }
-  el.innerHTML = `<div class="cmp">${goalBar('Meta de peso', s.w, profile.goalStartW, profile.goalW, ' kg')}${goalBar('Meta de gordura', s.c ? s.c.fat : null, profile.goalStartFat, profile.goalFat, '%')}</div>`;
+  el.innerHTML = `<div class="cmp">${goalBar('Meta de peso', s.w, profile.goalStartW, profile.goalW, ' kg')}${goalBar('Meta de gordura (relógio)', (watchComp()||{c:{}}).c.fat ?? null, profile.goalStartFat, profile.goalFat, '%')}</div>`;
 }
 
 /* ---------- resumo do período ---------- */
@@ -806,10 +827,12 @@ function renderSummary(){
   if(!first){ el.innerHTML = '<div class="note" style="margin:0">Ainda não há medições suficientes neste período.</div>'; return }
   const a = entryComp(first), b = entryComp(last), f = v=>Math.abs(v).toFixed(1).replace('.',',');
   const days = Math.max(1, Math.round((last.t-first.t)/DAY)), n = history.filter(h=>h.t>=first.t).length;
-  const dW = b.w-a.w, dFat = (a.fatKg!=null && b.fatKg!=null) ? b.fatKg-a.fatKg : null, dLean = dFat!=null ? dW-dFat : null;
-  let txt = Math.abs(dW)<0.1 ? `Em ${days} dias seu peso ficou <b>estável</b>.`
-    : `Em ${days} dias você ${dW<0?'perdeu':'ganhou'} <b style="color:var(${dW<0?'--accent':'--warn'})">${f(dW)} kg</b>`+
-      (dFat!=null && Math.abs(dW)>=0.1 ? `: ${f(dFat)} kg de gordura ${dFat<0?'a menos':'a mais'} e ${f(dLean)} kg de massa magra ${dLean<0?'a menos':'a mais'}.` : '.');
+  const ws = history.filter(h=>h.src==='watch' && h.t>=first.t && h.t<=last.t);
+  const wa = ws.length>=2 ? entryComp(ws[ws.length-1]) : null, wb = ws.length>=2 ? entryComp(ws[0]) : null;
+  const dW = b.w-a.w, dFat = (wa && wb && wa.fatKg!=null && wb.fatKg!=null) ? wb.fatKg-wa.fatKg : null, dLean = (dFat!=null && wa.ffm!=null && wb.ffm!=null) ? wb.ffm-wa.ffm : null;
+  let txt = (Math.abs(dW)<0.1 ? `Em ${days} dias seu peso ficou <b>estável</b>.`
+    : `Em ${days} dias você ${dW<0?'perdeu':'ganhou'} <b style="color:var(${dW<0?'--accent':'--warn'})">${f(dW)} kg</b>.`)
+      + (dFat!=null ? ` Pelo relógio, a gordura ${dFat<0?'caiu':'subiu'} ${f(dFat)} kg${dLean!=null ? ` e a massa magra ${dLean<0?'caiu':'subiu'} ${f(dLean)} kg` : ''}.` : '');
   const perWeek = dW/(days/7);
   if(days>=5 && Math.abs(dW)>=0.1){
     txt += ` Ritmo: <b>${perWeek<0?'−':'+'}${f(perWeek)} kg por semana</b>.`;
@@ -846,9 +869,6 @@ const BODY = {
   bone:    {label:'Ossos', color:'#e8eef5', unit:'kg', val:c=>c.bone, skeleton:true,
             sub:c=>`${(c.bone/c.w*100).toFixed(1).replace('.',',')}% do peso`,
             info:'Estimativa do peso dos minerais dos ossos. Costuma mudar pouco; exercício de força e cálcio ajudam a manter.'},
-  visceral:{label:'Visceral', color:'#ff8a5c', unit:'', val:c=>c.visceral, belly:true, rk:'visceral',
-            sub:()=>'Escala de 1 a 59',
-            info:'Gordura em volta dos órgãos da barriga, a mais ligada a riscos cardiovasculares. Até 9 é normal; 10–14 alto; 15 ou mais, muito alto.'},
 };
 const SHAPES = '<circle cx="50" cy="20" r="14"/><rect x="44" y="30" width="12" height="14" rx="3"/><rect x="27" y="40" width="46" height="74" rx="16"/><rect x="13" y="44" width="12" height="72" rx="6"/><rect x="75" y="44" width="12" height="72" rx="6"/><rect x="29" y="100" width="42" height="26" rx="10"/><rect x="30" y="116" width="18" height="100" rx="9"/><rect x="52" y="116" width="18" height="100" rx="9"/>';
 const SKELETON = '<g stroke="#e8eef5" stroke-width="2.6" stroke-linecap="round" fill="none" opacity=".9"><circle cx="50" cy="19" r="8.5"/><line x1="50" y1="30" x2="50" y2="106"/><line x1="33" y1="46" x2="67" y2="46"/><path d="M36 55 Q50 49 64 55 M36 64 Q50 58 64 64 M37 73 Q50 67 63 73 M39 82 Q50 77 61 82"/><path d="M35 106 Q50 121 65 106"/><line x1="19" y1="50" x2="19" y2="110"/><line x1="81" y1="50" x2="81" y2="110"/><line x1="39" y1="122" x2="39" y2="210"/><line x1="61" y1="122" x2="61" y2="210"/><circle cx="39" cy="166" r="2.5"/><circle cx="61" cy="166" r="2.5"/></g>';
@@ -1332,7 +1352,7 @@ $('#btnDemo').onclick = ()=>{
 /* ---------- histórico ---------- */
 function saveMeasurement(auto){
   if(!cur.weight || cur.savedT) return;
-  const c = compose(cur.weight, cur.impedance, profile);
+  const c = fullComp(cur.weight, null, profile);
   const t = Date.now();
   history.unshift({t, w:+cur.weight.toFixed(2), r:cur.impedance||null, fat: cur.extra.fat ?? (c.fat!=null?+c.fat.toFixed(1):null), bmi:+c.bmi.toFixed(1),
     muscle: c.muscle!=null?+c.muscle.toFixed(1):null, water: c.water!=null?+c.water.toFixed(1):null, visceral: c.visceral ?? null,
@@ -1352,7 +1372,7 @@ function renderHistory(){
     const c = entryComp(h);
     return `<div class="hitem" data-i="${i}">
     <div><div class="w">${h.w.toFixed(1).replace('.',',')} kg${h.src==='watch'?' <span class="tag ok" style="margin:0 0 0 4px;vertical-align:middle">⌚ relógio</span>':''}</div><div class="d">${new Date(h.t).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}</div></div>
-    <div style="display:flex;align-items:center"><div class="m">IMC ${c.bmi.toFixed(1).replace('.',',')}<br>${c.fat!=null?'Gordura '+c.fat.toFixed(1).replace('.',',')+'%':'sem impedância'}</div>
+    <div style="display:flex;align-items:center"><div class="m">IMC ${c.bmi.toFixed(1).replace('.',',')}${c.fat!=null ? '<br>Gordura '+c.fat.toFixed(1).replace('.',',')+'%' : ''}</div>
     <span style="color:var(--muted);font-size:20px;margin-left:10px">›</span></div></div>`;
   }).join('');
   el.querySelectorAll('.hitem').forEach(b=>b.onclick=()=>openDetail(+b.dataset.i));
@@ -1360,7 +1380,8 @@ function renderHistory(){
 }
 function openDetail(i){
   const h = history[i]; if(!h) return;
-  const p = h.p || profile, c = entryComp(h), prev = history[i+1];
+  const p = h.p || profile, c = entryComp(h), isW = h.src==='watch';
+  const prev = isW ? history.slice(i+1).find(x=>x.src==='watch') : history.slice(i+1).find(x=>x.src!=='watch');
   $('#sheetBody').innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin:6px 0 10px">
       <div><div class="small">${new Date(h.t).toLocaleString('pt-BR',{dateStyle:'full',timeStyle:'short'})}</div>
@@ -1368,13 +1389,14 @@ function openDetail(i){
       <button class="btn" id="sheetClose" style="flex:0 0 auto;padding:10px 16px">Fechar</button>
     </div>
     ${prev ? compareHTML(c, prev, h.t) : ''}
-    <h2>Seu corpo</h2><div id="bodyDetail"></div>
+    ${isW ? '<h2>Seu corpo</h2><div id="bodyDetail"></div>' : ''}
     <h2>Análise</h2>${analysisHTML(c, p)}
-    <h2>Composição corporal</h2><div class="grid">${metricsHTML(h.w, h.r, entryAlgo(h), {}, p, c)}</div>
+    ${isW ? `<h2>Composição corporal</h2><div class="grid">${metricsHTML(h.w, null, null, {}, p, c)}</div>`
+          : '<div class="note">Medição da balança: só peso e IMC. A composição corporal vem das medições do relógio.</div>'}
     ${h.p ? `<p class="small" style="margin-top:10px">Perfil na data: ${h.p.sex==='m'?'masculino':'feminino'}, ${h.p.age} anos, ${h.p.height} cm.</p>` : '<p class="small" style="margin-top:10px">Calculado com o seu perfil atual.</p>'}
     <button class="btn" id="sheetDel" style="width:100%;margin-top:16px;color:var(--bad)">Apagar medição</button>`;
   bodySig.detail = null;
-  renderBody('#bodyDetail', c, p, 'detail');
+  if(isW) renderBody('#bodyDetail', c, p, 'detail');
   $('#sheet').classList.add('open'); document.body.style.overflow='hidden';
   $('#sheetClose').onclick = closeDetail;
   $('#sheetDel').onclick = e=>{
@@ -1391,7 +1413,6 @@ const CHART = {
   fat:     {label:'Gordura', unit:'%', color:'#ffb547', lower:true,  get:(h,c)=>c.fat},
   muscle:  {label:'Músculo', unit:'kg', color:'#ff6b7a', lower:false, get:(h,c)=>c.muscle},
   water:   {label:'Água', unit:'%', color:'#4aa8ff', lower:false, get:(h,c)=>c.water},
-  visceral:{label:'Visceral', unit:'', color:'#ff8a5c', lower:true,  get:(h,c)=>c.visceral},
   bmi:     {label:'IMC', unit:'', color:'#b48cff', lower:true,  get:(h,c)=>c.bmi},
 };
 let chartKey = store.get('chartKey','w');
