@@ -17,6 +17,7 @@ import androidx.health.connect.client.records.WeightRecord
 import androidx.health.connect.client.records.metadata.Metadata
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
+import androidx.health.connect.client.units.Mass
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
@@ -29,6 +30,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.time.Instant
+import java.time.ZoneId
 import kotlin.reflect.KClass
 
 /**
@@ -52,12 +54,16 @@ class HealthBridgePlugin : Plugin() {
     )
     private val readPermissions: Set<String> =
         recordTypes.map { HealthPermission.getReadPermission(it) }.toSet()
+    // Gravar o peso da balança: vai para o Samsung Health e serve de backup
+    private val writeWeight: String = HealthPermission.getWritePermission(WeightRecord::class)
+    private val allPermissions: Set<String> = readPermissions + writeWeight
 
     private fun sdkStatus(): Int = HealthConnectClient.getSdkStatus(context, provider)
 
     private fun statusInto(ret: JSObject, granted: Set<String>) {
         ret.put("granted", granted.containsAll(readPermissions))
         ret.put("grantedAny", granted.contains(HealthPermission.getReadPermission(BodyFatRecord::class)))
+        ret.put("canWrite", granted.contains(writeWeight))
     }
 
     /** Diz se o Health Connect existe neste celular e se o app já tem permissão. */
@@ -93,7 +99,7 @@ class HealthBridgePlugin : Plugin() {
         }
         try {
             val contract = PermissionController.createRequestPermissionResultContract(provider)
-            val intent = contract.createIntent(context, readPermissions)
+            val intent = contract.createIntent(context, allPermissions)
             startActivityForResult(call, intent, "authorizeResult")
         } catch (e: Exception) {
             call.reject(e.message ?: "Não foi possível pedir a permissão")
@@ -150,9 +156,54 @@ class HealthBridgePlugin : Plugin() {
 
                 val ret = JSObject()
                 ret.put("records", out)
+                ret.put("self", context.packageName)
                 call.resolve(ret)
             } catch (e: Exception) {
                 call.reject(e.message ?: "Erro ao ler o Health Connect")
+            }
+        }
+    }
+
+    /** Grava uma pesagem da balança (t em milissegundos, kg). Regravar o mesmo t só atualiza. */
+    @PluginMethod
+    fun writeWeight(call: PluginCall) {
+        val t = (call.getDouble("t") ?: 0.0).toLong()
+        val kg = call.getDouble("kg") ?: 0.0
+        if (t <= 0L || kg <= 0.0) {
+            call.reject("Dados inválidos")
+            return
+        }
+        scope.launch {
+            try {
+                val time = Instant.ofEpochMilli(t)
+                val record = WeightRecord(
+                    time = time,
+                    zoneOffset = ZoneId.systemDefault().rules.getOffset(time),
+                    weight = Mass.kilograms(kg),
+                    metadata = Metadata.manualEntry(clientRecordId = "bio-balanca-$t"),
+                )
+                HealthConnectClient.getOrCreate(context).insertRecords(listOf(record))
+                call.resolve()
+            } catch (e: Exception) {
+                call.reject(e.message ?: "Erro ao gravar o peso")
+            }
+        }
+    }
+
+    /** Apaga do Health Connect uma pesagem gravada pelo app. */
+    @PluginMethod
+    fun deleteWeight(call: PluginCall) {
+        val t = (call.getDouble("t") ?: 0.0).toLong()
+        scope.launch {
+            try {
+                HealthConnectClient.getOrCreate(context).deleteRecords(
+                    WeightRecord::class,
+                    recordIdsList = emptyList(),
+                    clientRecordIdsList = listOf("bio-balanca-$t"),
+                )
+                call.resolve()
+            } catch (e: Exception) {
+                call.reject(e.message ?: "Erro ao apagar o peso")
             }
         }
     }

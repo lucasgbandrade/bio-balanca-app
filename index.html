@@ -145,6 +145,14 @@ nav svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;st
 .range i{position:absolute;top:-4px;width:4px;height:18px;border-radius:2px;background:var(--text);transform:translateX(-2px);box-shadow:0 0 0 2px var(--bg)}
 .rl{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
 .sumtxt{font-size:14.5px;line-height:1.55}
+.bio{background:linear-gradient(135deg,rgba(74,168,255,.14),rgba(62,230,181,.10));border:1px solid rgba(74,168,255,.45);border-radius:var(--radius);padding:14px;margin-top:8px}
+.bio.ok{background:rgba(62,230,181,.10);border-color:rgba(62,230,181,.45)}
+.bio .bt1{font-weight:800;font-size:16px}
+.bio .bs1{font-size:13px;color:var(--muted);line-height:1.5;margin-top:6px}
+.bio .bs1 b{color:var(--text)}
+.bio .bst{font-size:12px;color:var(--muted);margin-top:8px;display:flex;align-items:center;gap:8px}
+.spin{width:12px;height:12px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--accent2);animation:rot 1s linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
 .sumtxt b{font-weight:800}
 .sheet{position:fixed;inset:0;z-index:20;display:none}
 .sheet.open{display:block}
@@ -172,6 +180,7 @@ nav svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;st
 
   <!-- MEDIR -->
   <section class="view active" id="v-medir">
+    <div id="update"></div>
     <div id="remind"></div>
     <div class="gauge">
       <svg viewBox="0 0 200 200">
@@ -186,6 +195,7 @@ nav svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;st
       </div>
     </div>
 
+    <div id="bioPrompt"></div>
     <div id="cmp"></div>
     <div id="goals"></div>
     <div id="watchMain"></div>
@@ -199,6 +209,8 @@ nav svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;st
     <div id="bodyMain"></div>
     <h2>Análise</h2>
     <div id="analysis"></div>
+    <h2>Cintura e quadril</h2>
+    <div id="tape"></div>
     <h2>Composição corporal</h2>
     <div class="grid" id="metrics"></div>
     <p class="small" style="margin-top:12px;line-height:1.5">A composição corporal vem das medições de bioimpedância do Galaxy Watch; a balança fornece só o peso. Massa óssea, massa muscular e proteína são estimadas a partir da massa magra medida pelo relógio. Não substituem avaliação médica.</p>
@@ -288,7 +300,12 @@ nav svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;st
     </div>
     <div class="field"><label>Horário</label><input id="remTime" type="time"></div>
     <button class="btn" id="btnIcs" style="width:100%">📅 Adicionar lembrete à agenda</button>
-    <div class="note">Cria um evento repetido na agenda do celular, com alarme. O app também avisa na tela inicial quando a pesagem estiver atrasada. Dica: pese-se sempre no mesmo horário, em jejum, depois de ir ao banheiro e descalço.</div>
+    <div class="note" id="remNote">Cria um evento repetido na agenda do celular, com alarme. O app também avisa na tela inicial quando a pesagem estiver atrasada. Dica: pese-se sempre no mesmo horário, em jejum, depois de ir ao banheiro e descalço.</div>
+
+    <h2>App Android</h2>
+    <div class="field"><label>Começar a ler a balança ao abrir o app</label>
+      <div class="seg" id="segAutoRead"><button data-v="1">Sim</button><button data-v="0">Não</button></div>
+    </div>
   </section>
 
   <!-- AVANÇADO -->
@@ -300,6 +317,7 @@ nav svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;st
       <label class="btn" style="text-align:center">Importar backup<input type="file" id="fileImport" accept=".json,application/json" hidden></label>
     </div>
     <button class="btn" id="btnCsv" style="width:100%">Exportar planilha (.csv)</button>
+    <p class="small" id="appVersion" style="margin-top:12px;text-align:center"></p>
 
     <h2>Pacotes recebidos</h2>
     <div class="log" id="log"></div>
@@ -347,6 +365,8 @@ const toast = msg => { const t=$('#toast'); t.textContent=msg; t.classList.add('
 const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 const BLE = NATIVE && window.Capacitor.Plugins ? window.Capacitor.Plugins.BluetoothLe : null;
 const HB  = NATIVE && window.Capacitor.Plugins ? window.Capacitor.Plugins.HealthBridge : null;
+const LN  = NATIVE && window.Capacitor.Plugins ? window.Capacitor.Plugins.LocalNotifications : null;
+const BUILD = window.APP_BUILD || null;
 
 /* ---------- estado ---------- */
 let profile = Object.assign({sex:'m', age:30, height:175, autoSave:true, remFreq:'off', remDay:1, remTime:'07:00'}, store.get('profile', {}));
@@ -373,6 +393,7 @@ function renderProfile(){
   document.querySelectorAll('#segAuto button').forEach(b=>b.classList.toggle('on', (b.dataset.v==='1')===!!profile.autoSave));
   $('#remFreq').value = profile.remFreq; $('#remDay').value = String(profile.remDay); $('#remTime').value = profile.remTime;
   $('#remDayF').style.display = profile.remFreq==='weekly' ? '' : 'none';
+  document.querySelectorAll('#segAutoRead button').forEach(b=>b.classList.toggle('on', (b.dataset.v==='1')===(profile.autoRead!==false)));
 }
 document.querySelectorAll('#segSex button').forEach(b=>b.onclick=()=>{profile.sex=b.dataset.v;saveProfile()});
 $('#pAge').oninput = e=>{profile.age=+e.target.value||profile.age;saveProfile()};
@@ -387,9 +408,27 @@ const num = v=>{ const n = parseFloat(String(v).replace(',','.')); return n>0 ? 
 $('#gW').onchange = e=>{ profile.goalW = num(e.target.value); const s=latestState(); profile.goalStartW = s ? s.w : null; saveProfile() };
 $('#gFat').onchange = e=>{ profile.goalFat = num(e.target.value); const w=watchComp(); profile.goalStartFat = w ? (w.c.fat ?? null) : null; saveProfile() };
 document.querySelectorAll('#segAuto button').forEach(b=>b.onclick=()=>{ profile.autoSave = b.dataset.v==='1'; saveProfile() });
-$('#remFreq').onchange = e=>{ profile.remFreq = e.target.value; saveProfile() };
-$('#remDay').onchange = e=>{ profile.remDay = +e.target.value; saveProfile() };
-$('#remTime').onchange = e=>{ profile.remTime = e.target.value || '07:00'; saveProfile() };
+document.querySelectorAll('#segAutoRead button').forEach(b=>b.onclick=()=>{ profile.autoRead = b.dataset.v==='1'; saveProfile(); if(profile.autoRead) autoStart(); else if(scan) stopScan() });
+$('#remFreq').onchange = e=>{ profile.remFreq = e.target.value; saveProfile(); scheduleReminder(true) };
+$('#remDay').onchange = e=>{ profile.remDay = +e.target.value; saveProfile(); scheduleReminder(true) };
+$('#remTime').onchange = e=>{ profile.remTime = e.target.value || '07:00'; saveProfile(); scheduleReminder(true) };
+// no app Android o lembrete é uma notificação do próprio app
+async function scheduleReminder(ask){
+  if(!LN) return;
+  try{ await LN.cancel({notifications:[{id:1001}]}) }catch(e){}
+  if(profile.remFreq==='off'){ if(ask) toast('Lembrete desligado'); return }
+  try{
+    let perm = await LN.checkPermissions();
+    if(perm.display!=='granted' && ask) perm = await LN.requestPermissions();
+    if(perm.display!=='granted'){ if(ask) toast('Permita as notificações para receber o lembrete'); return }
+    const [hh,mm] = (profile.remTime||'07:00').split(':').map(Number), on = {hour:hh, minute:mm};
+    if(profile.remFreq==='weekly') on.weekday = profile.remDay + 1;     // 1 = domingo
+    await LN.schedule({notifications:[{id:1001, title:'⚖️ Hora de se pesar',
+      body:'Em jejum, depois de ir ao banheiro e descalço. Abra o Bio Balança e suba na balança.',
+      schedule:{on, allowWhileIdle:true}}]});
+    if(ask) toast(profile.remFreq==='weekly' ? 'Lembrete semanal ativado' : 'Lembrete diário ativado');
+  }catch(e){ if(ask) toast('Não foi possível criar o lembrete'); logText('lembrete: '+(e.message||e)) }
+}
 
 /* ---------- arquivos (download) ---------- */
 function download(name, text, type){
@@ -459,7 +498,9 @@ function renderHC(){
          <b>1.</b> No Samsung Health: menu → <b>Configurações</b> → <b>Health Connect</b>, e permita que ele <b>grave</b> “Gordura corporal”, “Peso” e “Massa magra”.<br>
          <b>2.</b> No app Health Connect: <b>Dados e acesso</b> → <b>Medidas corporais</b> → <b>Gordura corporal</b>. Suas medições do relógio precisam aparecer ali.<br>
          <b>3.</b> O Health Connect só libera dados de até 30 dias antes de você dar a permissão. Faça uma <b>nova medição no relógio</b>, espere ela aparecer no Samsung Health do celular e toque em <b>Sincronizar agora</b>.</div>`;
-    el.innerHTML = `<div class="s" style="margin-top:8px">✅ <b style="color:var(--text)">Sincronização automática ligada.</b>${last ? ' Última verificação: '+new Date(last).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})+'.' : ''}</div>${diag}
+    const wr = st.canWrite ? `<div class="s" style="margin-top:6px">💾 O peso da balança também é gravado no Health Connect (vai para o Samsung Health e serve de backup).</div>`
+      : `<div class="s" style="margin-top:6px">💾 Permita gravar o peso para mandá-lo ao Samsung Health e ter backup das pesagens.</div><button class="btn" id="hcAuth" style="width:100%;margin-top:8px">Permitir gravar o peso</button>`;
+    el.innerHTML = `<div class="s" style="margin-top:8px">✅ <b style="color:var(--text)">Sincronização automática ligada.</b>${last ? ' Última verificação: '+new Date(last).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})+'.' : ''}</div>${diag}${wr}
     <div class="actions" style="margin:10px 0 0"><button class="btn primary" id="hcSync">Sincronizar agora</button><button class="btn" id="hcOpen">Abrir Health Connect</button></div>`;
   }
   const o = $('#hcOpen'); if(o) o.onclick = ()=>HB.openSettings().catch(()=>toast('Não foi possível abrir o Health Connect'));
@@ -483,18 +524,27 @@ async function syncHealth(manual){
     const fats = recs.filter(r=>r.type==='fat').map(r=>r.t);
     store.set('hcInfo', {t:Date.now(), counts, srcs:Object.keys(srcs), lastFat: fats.length ? Math.max(...fats) : null});
     logText('health connect: '+JSON.stringify(counts)+' fontes '+Object.keys(srcs).join(','));
-    const added = mergeHealth(recs);
+    const added = mergeHealth(recs, res.self);
+    hcBackfill(recs, res.self);
     store.set('hcLast', Date.now());
     if(added){ toast(`${added} ${added===1 ? 'medição nova' : 'medições novas'} do relógio`); afterHistoryChange() }
-    else if(manual) toast('Nenhuma medição nova do relógio');
-    renderHC();
+    else if(manual && !(bio && bio.state!=='done')) toast('Nenhuma medição nova do relógio');
+    renderHC(); bioFoundCheck();
   }catch(e){
     logText('health connect: '+(e.message||e));
     if(manual) toast('Erro ao ler o Health Connect');
-  }finally{ hcBusy = false }
+  }finally{ hcBusy = false; renderBio() }
 }
-function mergeHealth(recs){
+function mergeHealth(recs, self){
   const of = t=>recs.filter(r=>r.type===t);
+  // backup: pesagens gravadas por este app voltam para o histórico (ex.: depois de reinstalar)
+  let restored = 0;
+  if(self) of('weight').filter(r=>r.src===self).forEach(r=>{
+    if(history.some(h=>h.src!=='watch' && Math.abs(h.t-r.t)<60000)) return;
+    if((store.get('hcDeleted', [])).includes(r.t)) return;
+    history.push({t:r.t, w:+r.v.toFixed(2), r:null, bmi:+(r.v/Math.pow(profile.height/100,2)).toFixed(1), p:{...profile}, restored:true});
+    restored++;
+  });
   const near = (list, t, win=3*60000)=>{ let best=null; list.forEach(r=>{ const d=Math.abs(r.t-t); if(d<=win && (!best || d<Math.abs(best.t-t))) best=r }); return best };
   const weights = of('weight').sort((a,b)=>a.t-b.t), heights = of('height').sort((a,b)=>a.t-b.t);
   let added = 0;
@@ -510,11 +560,163 @@ function mergeHealth(recs){
       p:{...profile, ...(hgt ? {height:Math.round(hgt*100)} : {})}});
     added++;
   });
-  if(added){ history.sort((a,b)=>b.t-a.t); store.set('history', history) }
-  return added;
+  if(added || restored){ history.sort((a,b)=>b.t-a.t); store.set('history', history) }
+  if(restored) toast(`${restored} ${restored===1?'pesagem recuperada':'pesagens recuperadas'} do Health Connect`);
+  return added + restored;
 }
+// grava no Health Connect as pesagens que ainda não estão lá
+async function hcBackfill(recs, self){
+  if(!HB || !hcState || !hcState.canWrite || !self) return;
+  const mine = recs.filter(r=>r.type==='weight' && r.src===self).map(r=>r.t);
+  const missing = scaleHist().filter(h=>!mine.some(t=>Math.abs(t-h.t)<60000)).slice(0, 60);
+  for(const h of missing){ try{ await HB.writeWeight({t:h.t, kg:h.w}) }catch(e){ logText('gravar peso: '+(e.message||e)); break } }
+  if(missing.length) logText(`health connect: ${missing.length} pesagens gravadas`);
+}
+function hcWrite(h){
+  if(HB && hcState && hcState.canWrite) HB.writeWeight({t:h.t, kg:h.w}).catch(e=>logText('gravar peso: '+(e.message||e)));
+}
+/* ---------- cintura e quadril (fita métrica) ---------- */
+let tape = store.get('tape', []), tapeOpen = false;
+function tapeRate(t, p){
+  const male = p.sex==='m', whr = t.waist/t.hip, whtr = t.waist/p.height;
+  const whrLim = male ? 0.90 : 0.85, w1 = male ? 94 : 80, w2 = male ? 102 : 88;
+  return {
+    whr, whtr,
+    whrR: whr < whrLim ? ['ok','Adequada'] : ['hi','Acima do recomendado'],
+    whtrR: whtr < 0.5 ? ['ok','Adequada'] : whtr < 0.6 ? ['mid','Atenção'] : ['hi','Alta'],
+    waistR: t.waist < w1 ? ['ok','Adequada'] : t.waist < w2 ? ['mid','Risco aumentado'] : ['hi','Risco alto'],
+    whrLim, w1,
+  };
+}
+function renderTape(){
+  const el = $('#tape'); if(!el) return;
+  const f = (v,d=1)=>v.toFixed(d).replace('.',','), last = tape[0], prev = tape[1];
+  let html = '';
+  if(last){
+    const r = tapeRate(last, profile), dlt = (a,b)=>{ const d=a-b; return Math.abs(d)<0.05 ? '' : ` <span class="${d<0?'good':'bad'} d" style="font-size:12px">${d<0?'▼':'▲'} ${f(Math.abs(d))}</span>` };
+    html += `<div class="acard"><div class="k">Medido em ${new Date(last.t).toLocaleDateString('pt-BR')}</div>
+      <div class="grid" style="margin-top:10px">
+        <div><div class="k">Cintura</div><div class="t">${f(last.waist)} cm${prev?dlt(last.waist,prev.waist):''}</div><span class="tag ${r.waistR[0]}">${r.waistR[1]}</span></div>
+        <div><div class="k">Quadril</div><div class="t">${f(last.hip)} cm${prev?dlt(last.hip,prev.hip):''}</div></div>
+        <div><div class="k">Cintura ÷ quadril</div><div class="t">${f(r.whr,2)}</div><span class="tag ${r.whrR[0]}">${r.whrR[1]}</span></div>
+        <div><div class="k">Cintura ÷ altura</div><div class="t">${f(r.whtr,2)}</div><span class="tag ${r.whtrR[0]}">${r.whtrR[1]}</span></div>
+      </div>
+      <div class="s" style="margin-top:10px">Referências: cintura ÷ quadril abaixo de ${f(r.whrLim,2)} (OMS); cintura ÷ altura abaixo de 0,5; cintura abaixo de ${r.w1} cm. São bons indicadores de gordura abdominal, que o relógio não mede.</div></div>`;
+  }
+  html += tapeOpen ? `<div class="acard">
+      <div class="row"><div class="field"><label>Cintura (cm)</label><input id="tWaist" type="number" step="0.5" inputmode="decimal" placeholder="na altura do umbigo"></div>
+      <div class="field"><label>Quadril (cm)</label><input id="tHip" type="number" step="0.5" inputmode="decimal" placeholder="parte mais larga"></div></div>
+      <div class="actions" style="margin:0"><button class="btn primary" id="tSave">Salvar medidas</button><button class="btn" id="tCancel">Cancelar</button></div>
+      <div class="s" style="margin-top:8px">Meça em pé, de manhã, com a fita reta e sem apertar, depois de soltar o ar.</div></div>`
+    : `<button class="btn" id="tOpen" style="width:100%">📏 ${last ? 'Registrar novas medidas' : 'Registrar cintura e quadril'}</button>`;
+  if(tape.length>1) html += `<p class="small" style="margin-top:8px">${tape.length} registros · primeiro em ${new Date(tape[tape.length-1].t).toLocaleDateString('pt-BR')}: cintura ${f(tape[tape.length-1].waist)} cm.</p>`;
+  el.innerHTML = html;
+  const o = $('#tOpen'); if(o) o.onclick = ()=>{ tapeOpen = true; renderTape(); $('#tWaist').focus() };
+  const c = $('#tCancel'); if(c) c.onclick = ()=>{ tapeOpen = false; renderTape() };
+  const sv = $('#tSave'); if(sv) sv.onclick = ()=>{
+    const waist = num($('#tWaist').value), hip = num($('#tHip').value);
+    if(!waist || !hip || waist<40 || waist>200 || hip<50 || hip>200) return toast('Confira as medidas em centímetros');
+    tape.unshift({t:Date.now(), waist, hip}); store.set('tape', tape); tapeOpen = false; renderTape(); toast('Medidas salvas');
+  };
+}
+
+/* ---------- versão nova (releases do GitHub) ---------- */
+async function checkUpdate(){
+  if(!NATIVE || !BUILD || !BUILD.repo) return;
+  try{
+    const r = await fetch(`https://api.github.com/repos/${BUILD.repo}/releases/latest`, {headers:{Accept:'application/vnd.github+json'}});
+    if(!r.ok) return;                                   // repositório privado ou sem internet: ignora
+    const j = await r.json();
+    const num = v=>parseInt(String(v||'').split('.').pop(), 10) || 0;
+    if(num(j.tag_name) <= num(BUILD.version)) return;
+    const apk = (j.assets||[]).find(a=>/\.apk$/i.test(a.name));
+    $('#update').innerHTML = `<div class="bio" style="margin:4px 0 8px"><div class="bt1">⬆️ Nova versão ${j.tag_name.replace(/^v/,'')} disponível</div>
+      <div class="bs1">Você está na ${BUILD.version}. Baixe e instale por cima: seu histórico continua.</div>
+      <div class="actions" style="margin:10px 0 0"><a class="btn primary" style="text-align:center;text-decoration:none" href="${apk ? apk.browser_download_url : j.html_url}">Baixar</a><button class="btn" id="updLater">Depois</button></div></div>`;
+    $('#updLater').onclick = ()=>{ $('#update').innerHTML='' };
+  }catch(e){}
+}
+
+/* ---------- leitura automática da balança (app Android) ---------- */
+let autoTimer = null;
+function autoReadOn(){ return NATIVE && profile.autoRead !== false && !!(lockedId || okokInfo) }
+function autoStart(){
+  if(!autoReadOn() || scan || demoTimer) return;
+  startNativeScan(true);
+  clearInterval(autoTimer);
+  autoTimer = setInterval(()=>{
+    if(!scan || !scan.native){ clearInterval(autoTimer); return }
+    const idle = Date.now() - (scan.lastData || scan.started);
+    if(cur.final && cur.savedT && cur.savedT > scan.started && Date.now()-cur.savedT > 15000) stopScan();    // pesagem salva: para de procurar
+    else if(idle > 3*60000) stopScan();                                         // 3 min sem a balança: poupa bateria
+  }, 5000);
+}
+
+/* ---------- bioimpedância depois da pesagem ----------
+   Ao salvar uma pesagem, confere pela sincronização se já existe medição do relógio no mesmo dia.
+   Se não existir, pede a medição no relógio e fica conferindo até ela chegar. */
+let bio = store.get('bio', null), bioTimer = null;
+function bioFor(t){
+  const d0 = new Date(t).setHours(0,0,0,0), d1 = d0 + DAY;
+  return history.find(h=>h.src==='watch' && h.t>=d0 && h.t<d1);
+}
+function setBio(b){ bio = b; store.set('bio', b); renderBio() }
+async function checkBio(t){
+  if(!NATIVE) return;                                    // só o app Android lê o relógio
+  setBio({t, state:'checking'});
+  await syncHealth(false);
+  const found = bioFor(t);
+  if(found){ setBio({t, state:'done', found:found.t, already:true}); return }
+  setBio({t, state:'pending', checked:Date.now()});
+  startBioPoll();
+}
+function bioFoundCheck(){
+  if(!bio || bio.state==='done') return;
+  const found = bioFor(bio.t);
+  if(found){ stopBioPoll(); setBio({t:bio.t, state:'done', found:found.t}); toast('Bioimpedância recebida do relógio ✓') }
+  else if(bio.state==='pending'){ bio.checked = Date.now(); store.set('bio', bio); renderBio() }
+}
+function startBioPoll(){
+  stopBioPoll();
+  bioTimer = setInterval(()=>{
+    if(!bio || bio.state!=='pending' || Date.now()-bio.t > 30*60000){ stopBioPoll(); return }   // confere por até 30 min
+    if(document.visibilityState==='visible') syncHealth(false);
+  }, 20000);
+}
+function stopBioPoll(){ if(bioTimer){ clearInterval(bioTimer); bioTimer=null } }
+function renderBio(){
+  const el = $('#bioPrompt'); if(!el) return;
+  if(!NATIVE || !bio || (bio.state==='done' && bio.already)){ el.innerHTML=''; return }
+  const hm = t=>new Date(t).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  if(bio.state==='done'){
+    const h = history.find(x=>x.t===bio.found), c = h ? entryComp(h) : null, f = v=>v.toFixed(1).replace('.',',');
+    el.innerHTML = `<div class="bio ok"><div class="bt1">✅ Bioimpedância de hoje recebida</div>
+      <div class="bs1">${c && c.fat!=null ? `Gordura <b>${f(c.fat)}%</b>${c.water!=null?` · água <b>${f(c.water)}%</b>`:''}${c.ffm!=null?` · massa magra <b>${f(c.ffm)} kg</b>`:''} · medida às ${hm(bio.found)}.` : 'Medição do relógio recebida.'}</div>
+      <div class="actions" style="margin:10px 0 0"><button class="btn primary" id="bioSee">Ver detalhes</button><button class="btn" id="bioOk">OK</button></div></div>`;
+    $('#bioSee').onclick = ()=>{ const i = history.findIndex(x=>x.t===bio.found); if(i>=0) openDetail(i) };
+    $('#bioOk').onclick = ()=>setBio(null);
+    return;
+  }
+  const st = hcState || {};
+  const needHC = hcState && (!st.available || !st.grantedAny);
+  el.innerHTML = `<div class="bio"><div class="bt1">⌚ Agora meça a bioimpedância no relógio</div>
+    <div class="bs1">Ainda não há medição de composição corporal de hoje. No Galaxy Watch: <b>Samsung Health → Composição corporal → Medir</b>, com o dedo médio e o anelar nas teclas. Quando terminar, volte aqui: o app confere sozinho.</div>
+    ${needHC ? `<div class="bs1" style="color:var(--warn)">Para conferir, conecte o Health Connect em <b>Conexões</b>.</div>`
+             : `<div class="bst">${bio.state==='checking' || hcBusy ? '<span class="spin"></span>Verificando a sincronização…' : `Ainda não chegou${bio.checked ? ' (conferido às '+hm(bio.checked)+')' : ''}. O Samsung Health pode levar alguns minutos para sincronizar.`}</div>`}
+    <div class="actions" style="margin:10px 0 0">
+      ${needHC ? '<button class="btn primary" id="bioHC">Conectar</button>' : '<button class="btn primary" id="bioCheck">Já medi, verificar</button>'}
+      <button class="btn" id="bioSkip">Agora não</button></div></div>`;
+  const c1 = $('#bioCheck'); if(c1) c1.onclick = async ()=>{
+    bio.state='checking'; renderBio();
+    await syncHealth(true);
+    if(bio && bio.state==='checking'){ bio.state='pending'; bioFoundCheck(); if(bio.state==='pending') startBioPoll() }
+  };
+  const c2 = $('#bioHC'); if(c2) c2.onclick = ()=>document.querySelector('nav button[data-view="v-con"]').click();
+  $('#bioSkip').onclick = ()=>{ stopBioPoll(); setBio(null) };
+}
+
 function afterHistoryChange(){
-  renderWatch(); renderCompare(); renderGoals(); renderRemind(); renderMetrics(); renderIdleGauge();
+  renderWatch(); renderCompare(); renderGoals(); renderRemind(); renderMetrics(); renderIdleGauge(); bioFoundCheck();
   if($('#v-hist').classList.contains('active')) renderHistory();
 }
 function lastWatch(){ return history.find(h=>h.src==='watch') }
@@ -540,7 +742,7 @@ function renderWatch(){
 /* ---------- backup ---------- */
 $('#btnExport').onclick = ()=>{
   const d = new Date().toISOString().slice(0,10);
-  download(`bio-balanca-backup-${d}.json`, JSON.stringify({app:'bio-balanca', v:1, exportedAt:Date.now(), profile, history}, null, 1), 'application/json');
+  download(`bio-balanca-backup-${d}.json`, JSON.stringify({app:'bio-balanca', v:2, exportedAt:Date.now(), profile, history, tape}, null, 1), 'application/json');
 };
 $('#btnCsv').onclick = ()=>{
   const n = (v,d=1)=> v==null || !isFinite(v) ? '' : v.toFixed(d).replace('.',',');
@@ -559,6 +761,7 @@ $('#fileImport').onchange = async e=>{
     list.forEach(h=>{ if(h && typeof h.t==='number' && typeof h.w==='number' && !have.has(h.t)){ history.push(h); have.add(h.t); added++ } });
     history.sort((a,b)=>b.t-a.t); store.set('history', history);
     if(data.profile && !store.get('profile', null)){ profile = Object.assign(profile, data.profile); saveProfile() }
+    if(Array.isArray(data.tape)){ const ht = new Set(tape.map(x=>x.t)); data.tape.forEach(x=>{ if(x && x.t && !ht.has(x.t)){ tape.push(x); added++ } }); tape.sort((a,b)=>b.t-a.t); store.set('tape', tape); renderTape() }
     renderCompare(); renderGoals(); renderRemind(); renderMetrics(); renderIdleGauge();
     toast(added ? `${added} medições importadas` : 'Nenhuma medição nova no arquivo');
   }catch(err){ toast('Arquivo de backup inválido') }
@@ -633,15 +836,74 @@ function rate(key, val, p){
   if(val<R[2]) return ['mid','Alto'];
   return ['hi','Muito alto'];
 }
+/* Classificações usadas pelos apps de balança:
+   IMC pelas faixas da OMS; gordura pelas categorias do American Council on Exercise (ACE);
+   massa magra pelo índice de massa magra (massa magra ÷ altura²). */
+function bmiClass(b){
+  if(b<18.5) return ['lo','Abaixo do peso'];
+  if(b<25)   return ['ok','Peso normal'];
+  if(b<30)   return ['mid','Sobrepeso'];
+  if(b<35)   return ['hi','Obesidade grau I'];
+  if(b<40)   return ['hi','Obesidade grau II'];
+  return ['hi','Obesidade grau III'];
+}
+const FAT_CUTS = {m:[6,14,18,25], f:[14,21,25,32]};      // essencial | atleta | em forma | aceitável | obesidade
+function fatClass(v, p){
+  const t = FAT_CUTS[p.sex==='m'?'m':'f'];
+  if(v<t[0]) return ['lo','Muito baixa', 0];
+  if(v<t[1]) return ['ok','Atleta', 1];
+  if(v<t[2]) return ['ok','Em forma', 2];
+  if(v<t[3]) return ['mid','Aceitável', 3];
+  return ['hi','Obesidade', 4];
+}
+function ffmiClass(ffmi, p){
+  const t = p.sex==='m' ? [17,20,23] : [14.5,17,19.5];
+  if(ffmi<t[0]) return ['lo','Baixa'];
+  if(ffmi<t[1]) return ['ok','Normal'];
+  if(ffmi<t[2]) return ['ok','Boa'];
+  return ['ok','Muito alta'];
+}
+function classify(key, v, p){
+  if(v==null || !isFinite(v)) return null;
+  if(key==='bmi') return bmiClass(v);
+  if(key==='fat') return fatClass(v, p);
+  if(key==='ffm') return ffmiClass(v/Math.pow(p.height/100,2), p);
+  return rate(key, v, p);
+}
+// avaliação geral: com bioimpedância, a gordura corporal decide (o IMC não separa gordura de músculo)
+function overall(c, p){
+  const f = v=>v.toFixed(1).replace('.',','), b = bmiClass(c.bmi);
+  if(c.fat==null) return {cls:b[0], title:b[1], text:`Pelo IMC (${f(c.bmi)}). Sem a bioimpedância do relógio não dá para separar gordura de músculo.`};
+  const fc = fatClass(c.fat, p);
+  let o;
+  if(fc[2]===0)      o = {cls:'lo',  title:'Gordura muito baixa', text:'Abaixo do mínimo saudável. Vale procurar orientação de um profissional.'};
+  else if(fc[2]<=2)  o = {cls:'ok',  title:'Saudável', text:`Gordura corporal na faixa "${fc[1]}".`};
+  else if(fc[2]===3) o = {cls:'mid', title:'Saudável, com atenção', text:'Gordura corporal aceitável, mas acima da faixa "em forma".'};
+  else               o = {cls:'hi',  title:'Obesidade', text:'Gordura corporal na faixa de obesidade.'};
+  if(b[0]!=='ok' && fc[2]>=1 && fc[2]<=2 && c.bmi>=25) o.text += ' O IMC alto vem da massa muscular, não da gordura.';
+  if(b[0]==='ok' && fc[2]===4) { o.title = 'Obesidade oculta'; o.text = 'Peso normal pelo IMC, mas gordura corporal na faixa de obesidade.' }
+  return o;
+}
+function fatScaleHTML(v, p){
+  // 5 faixas do mesmo tamanho; o marcador fica proporcional dentro da faixa
+  const t = FAT_CUTS[p.sex==='m'?'m':'f'], b = [0, ...t, t[3]+15];
+  let k = b.findIndex((x,i)=>i<5 && v>=x && v<b[i+1]); if(k<0) k = v<0 ? 0 : 4;
+  const pos = Math.min(99, (k + Math.min(1, (v-b[k])/(b[k+1]-b[k])))*20);
+  const cols = ['var(--low)','#2bc9e8','var(--accent)','var(--warn)','var(--bad)'];
+  return `<div style="display:flex;height:10px;border-radius:6px;overflow:hidden;margin:12px 0 4px;gap:2px">${cols.map(c=>`<span style="flex:1;background:${c}"></span>`).join('')}</div>
+    <div style="position:relative;height:0"><i style="position:absolute;top:-17px;left:${pos}%;width:4px;height:18px;border-radius:2px;background:var(--text);transform:translateX(-2px);box-shadow:0 0 0 2px var(--bg)"></i></div>
+    <div style="display:flex;font-size:10.5px;color:var(--muted);text-align:center">${['Muito baixa','Atleta','Em forma','Aceitável','Obesidade'].map((n,i)=>`<span style="flex:1">${n}<br>${i===0?`< ${t[0]}%`:i===4?`≥ ${t[3]}%`:`${t[i-1]}–${t[i]-1}%`}</span>`).join('')}</div>`;
+}
+
 // A balança fornece só o peso: composição corporal vem apenas do relógio (bioimpedância real)
 function fullComp(w, R, p, algo){
   if(!w) return null;
   return {w, bmi: w/Math.pow(p.height/100,2)};
 }
-function watchComp(){ const lw = lastWatch(); return lw ? {h:lw, c:entryComp(lw)} : null }
+function watchComp(){ return latestComp() }
 function renderMetrics(){
   const lw = watchComp();
-  $('#compDate').textContent = lw ? '· ⌚ relógio, '+new Date(lw.h.t).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}) : '';
+  $('#compDate').textContent = lw ? (lw.c.src==='combo' ? '· ⚖️ + ⌚ ' : '· ⌚ relógio, ')+new Date(lw.h.t).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}) : '';
   $('#metrics').innerHTML = lw ? metricsHTML(lw.h.w, null, null, {}, lw.h.p || profile, lw.c)
     : '<div class="note" style="grid-column:1/-1;margin:0">Nenhuma medição do relógio ainda. Faça a medição de composição corporal no Galaxy Watch e ela aparece aqui.</div>';
   renderBody('#bodyMain', lw ? lw.c : null, profile, 'main', 'Meça a composição corporal no relógio para ver aqui.');
@@ -658,7 +920,7 @@ function metricsHTML(w, R, algo, ex, p, cIn){
     ['IMC','bmi', c.bmi, '', 1, 40],
     ['Gordura corporal','fat', ex.fat ?? c.fat, '%', 1, 50],
     ['Massa gorda', null, c.fatKg, 'kg', 1],
-    ['Massa magra', null, ex.ffm ?? c.ffm, 'kg', 1],
+    ['Massa magra', 'ffm', ex.ffm ?? c.ffm, 'kg', 1],
     ['Massa muscular', null, ex.muscle ?? c.muscle, 'kg', 1],
     ['Músculo esquelético', null, c.skeletal, 'kg', 1],
     ['Água corporal','water', c.water, '%', 1, 80],
@@ -669,13 +931,15 @@ function metricsHTML(w, R, algo, ex, p, cIn){
     ['Idade metabólica', null, c.metaAge, 'anos', 0],
     ['Impedância', null, R, 'Ω', 0],
   ].filter(it=>it[2]!=null && isFinite(it[2]));
-  const okNote = c.src==='watch'
+  const okNote = c.src==='combo'
+    ? `<div class="note" style="grid-column:1/-1;border-color:rgba(62,230,181,.35)">⚖️ + ⌚ <b>Peso da balança com a composição medida pelo Galaxy Watch</b> no mesmo dia. Massa óssea e proteína são estimadas a partir da massa magra.</div>`
+    : c.src==='watch'
     ? `<div class="note" style="grid-column:1/-1;border-color:rgba(62,230,181,.35)">⌚ <b>Medido pelo Galaxy Watch</b> (bioimpedância real). Massa óssea e proteína são estimadas a partir da massa magra.</div>`
     : algo==='okok' && R===600
     ? `<div class="note warn" style="grid-column:1/-1">Sua balança (OKOK, formato C0) envia sempre a mesma impedância, <b>600 Ω</b>: ela não mede a bioimpedância de verdade. Os valores abaixo usam as fórmulas do app OKOK e por isso dependem só do peso, altura, idade e sexo.</div>` : '';
   return okNote + items.map(([k,key,v,u,d,max])=>{
     const has = v!=null && isFinite(v);
-    const r = has && key ? rate(key,v,p) : null;
+    const r = has && key ? classify(key,v,p) : null;
     return `<div class="card"><div class="k">${k}</div>
       <div class="v">${has? v.toFixed(d).replace('.',',') : '--'}<small>${u}</small></div>
       ${r?`<span class="tag ${r[0]}">${r[1]}</span>`:''}
@@ -689,27 +953,38 @@ const TYPES = [ // [nível de gordura][nível de músculo]
   [['Magro','Pouca gordura e pouca massa muscular. Treino de força e boa alimentação ajudam a ganhar massa.'],
    ['Esguio','Pouca gordura e músculo dentro do normal.'],
    ['Atlético','Pouca gordura e bastante massa muscular.']],
-  [['Pouco exercitado','Gordura no ideal, mas pouca massa muscular. Treino de força é o próximo passo.'],
-   ['Equilibrado','Gordura e músculo dentro do esperado para o seu perfil.'],
-   ['Musculoso','Gordura no ideal e bastante massa muscular.']],
+  [['Pouco exercitado','Gordura em faixa saudável, mas pouca massa muscular. Treino de força é o próximo passo.'],
+   ['Equilibrado','Gordura em faixa saudável e músculo dentro do esperado para o seu perfil.'],
+   ['Musculoso','Gordura em faixa saudável e bastante massa muscular.']],
   [['Gordura oculta','Gordura acima do ideal com pouca massa muscular, mesmo que o peso pareça normal. Combine treino de força e alimentação.'],
    ['Acima do peso','Gordura acima do ideal com músculo normal. O foco é reduzir gordura mantendo o músculo.'],
    ['Robusto','Bastante músculo, mas também gordura acima do ideal.']],
 ];
 function bodyType(c, p){
   if(c.fat==null || c.ffm==null) return null;
-  const fr = rate('fat', c.fat, p)[0], fl = fr==='lo' ? 0 : fr==='ok' ? 1 : 2;
+  const fi = fatClass(c.fat, p)[2], fl = fi<=1 ? 0 : fi<=3 ? 1 : 2;
   const ffmi = c.ffm/Math.pow(p.height/100,2), [a,b] = p.sex==='m' ? [17,20] : [14.5,17];
   const ml = ffmi<a ? 0 : ffmi<=b ? 1 : 2;
   return {fl, ml, ffmi, name:TYPES[fl][ml][0], desc:TYPES[fl][ml][1]};
 }
 function analysisHTML(c, p){
   const f = v=>v.toFixed(1).replace('.',',');
+  const ov = overall(c, p), b = bmiClass(c.bmi), fc = c.fat!=null ? fatClass(c.fat, p) : null;
+  const fm = c.ffm!=null ? ffmiClass(c.ffm/Math.pow(p.height/100,2), p) : null;
+  const col = {ok:'var(--accent)', mid:'var(--warn)', hi:'var(--bad)', lo:'var(--low)'}[ov.cls];
+  let top = `<div class="acard" style="border-color:${col}"><div class="k">Avaliação geral</div>
+    <div class="t" style="color:${col};font-size:26px">${ov.title}</div><div class="s">${ov.text}</div>
+    ${fc ? fatScaleHTML(c.fat, p) : ''}
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">
+      <span class="tag ${b[0]}">IMC ${f(c.bmi)} · ${b[1]}</span>
+      ${fc ? `<span class="tag ${fc[0]}">Gordura ${f(c.fat)}% · ${fc[1]}</span>` : ''}
+      ${fm ? `<span class="tag ${fm[0]}">Massa magra · ${fm[1]}</span>` : ''}
+    </div></div>`;
   const h2 = Math.pow(p.height/100,2), lo = 18.5*h2, hi = 24.9*h2, w = c.w;
   const diff = w<lo ? lo-w : w>hi ? w-hi : 0;
   const std = p.sex==='m' ? (p.height-80)*0.7 : (p.height-70)*0.6, obes = (w-std)/std*100;
   const pos = clamp((c.bmi-15)/(35-15),0,1)*100;
-  let html = `<div class="acard"><div class="k">Peso ideal para ${p.height} cm</div>
+  let html = top + `<div class="acard"><div class="k">Peso ideal para ${p.height} cm</div>
     <div class="t">${f(lo)} – ${f(hi)} kg</div>
     <div class="s">${diff===0 ? 'Você está <b style="color:var(--accent)">dentro da faixa</b> de peso saudável.' : `Você está <b style="color:var(--warn)">${f(diff)} kg ${w>hi?'acima':'abaixo'}</b> da faixa saudável.`}</div>
     <div class="range"><i style="left:${pos}%"></i></div>
@@ -767,7 +1042,7 @@ function renderSummary(){
   if(!first){ el.innerHTML = '<div class="note" style="margin:0">Ainda não há medições suficientes neste período.</div>'; return }
   const a = entryComp(first), b = entryComp(last), f = v=>Math.abs(v).toFixed(1).replace('.',',');
   const days = Math.max(1, Math.round((last.t-first.t)/DAY)), n = sh.filter(h=>h.t>=first.t).length;
-  const ws = history.filter(h=>h.src==='watch' && h.t>=first.t);   // composição: só o relógio
+  const ws = visibleHist().filter(h=>h.t>=first.t && entryComp(h).fat!=null);   // composição: só bioimpedância do relógio
   const wa = ws.length>=2 ? entryComp(ws[ws.length-1]) : null, wb = ws.length>=2 ? entryComp(ws[0]) : null;
   const dW = b.w-a.w, dFat = (wa && wb && wa.fatKg!=null && wb.fatKg!=null) ? wb.fatKg-wa.fatKg : null, dLean = (dFat!=null && wa.ffm!=null && wb.ffm!=null) ? wb.ffm-wa.ffm : null;
   let txt = (Math.abs(dW)<0.1 ? `Em ${days} dias seu peso ficou <b>estável</b>.`
@@ -844,8 +1119,9 @@ function renderBody(sel, c, p, uid, emptyMsg){
   if(c==null || v==null){
     text = `<div class="bl">${m.label}</div><div class="bv">--</div><div class="bi">${emptyMsg || 'Sem dados de composição para esta medição.'}</div>`;
   } else {
-    const r = m.rk ? rate(m.rk, v, p) : null, R = m.rk ? ranges(m.rk, p) : null;
-    const ideal = R ? (m.rk==='visceral' ? 'até 9' : `${R[0]}–${R[1]}${m.unit}`) : null;
+    const r = m.rk ? classify(m.rk, v, p) : null, R = m.rk ? ranges(m.rk, p) : null;
+    const ft = FAT_CUTS[p.sex==='m'?'m':'f'];
+    const ideal = m.rk==='fat' ? `${ft[1]}–${ft[2]}% (em forma) · obesidade a partir de ${ft[3]}%` : R ? (m.rk==='visceral' ? 'até 9' : `${R[0]}–${R[1]}${m.unit}`) : null;
     const dec = m.unit==='' ? 0 : 1;
     text = `<div class="bl" style="color:${m.color}">${m.label}</div>
       <div class="bv">${v.toFixed(dec).replace('.',',')}<small>${m.unit}</small></div>
@@ -909,8 +1185,32 @@ function showWeight(w, final){
 }
 /* comparação com a última medição salva */
 function entryAlgo(h){ return h.algo || (h.r===600 ? 'okok' : null) }
+/* Pesagem e bioimpedância do mesmo dia formam uma medição só:
+   peso exato da balança + percentuais medidos pelo relógio. */
+const dayKey = t=>new Date(t).setHours(0,0,0,0);
+function scaleOnDay(t){ const d = dayKey(t); return history.find(h=>h.src!=='watch' && dayKey(h.t)===d) }
+function watchOnDay(t){
+  const d = dayKey(t); let best = null;
+  history.forEach(h=>{ if(h.src==='watch' && dayKey(h.t)===d && (!best || Math.abs(h.t-t)<Math.abs(best.t-t))) best = h });
+  return best;
+}
+function isMergedWatch(h){ return h.src==='watch' && !!scaleOnDay(h.t) }
+function visibleHist(){ return history.filter(h=>!isMergedWatch(h)) }
 function entryComp(h){
-  if(h.src!=='watch' || !h.m) return fullComp(h.w, h.r, h.p || profile, entryAlgo(h));
+  if(h.src==='watch') return watchCompOf(h);
+  const base = fullComp(h.w, null, h.p || profile);
+  const wh = watchOnDay(h.t); if(!wh) return base;
+  const wc = watchCompOf(wh), k = h.w/wc.w;
+  const c = {...wc, w:h.w, bmi:base.bmi, src:'combo', watchT:wh.t};
+  ['fatKg','ffm','muscle','bone'].forEach(x=>{ if(wc[x]!=null) c[x] = wc[x]*k });   // percentuais ficam iguais
+  return c;
+}
+function latestComp(){
+  for(const h of visibleHist()){ const c = entryComp(h); if(c.fat!=null) return {h, c} }
+  return null;
+}
+function watchCompOf(h){
+  if(!h.m) return fullComp(h.w, null, h.p || profile);
   const p = h.p || profile, w = h.w, m = h.m, c = fullComp(w, null, p, null);
   if(m.fat!=null){ c.fat = m.fat; c.fatKg = m.fatKg ?? w*m.fat/100 }
   else if(m.fatKg!=null){ c.fatKg = m.fatKg; c.fat = m.fatKg/w*100 }
@@ -953,7 +1253,7 @@ function renderCompare(){
   if(!sh.length){ el.innerHTML=''; return }
   const last = sh[0], prev = sh[1];
   if(!prev){ el.innerHTML='<div class="cmp"><div class="hd" style="margin:0;text-align:center">Salve mais uma pesagem para ver a comparação.</div></div>'; return }
-  el.innerHTML = compareHTML(fullComp(last.w, null, last.p || profile), prev, last.t, 'Pesagens salvas');
+  el.innerHTML = compareHTML(entryComp(last), prev, last.t, 'Pesagens salvas');
 }
 /* sem leitura em andamento, o medidor mostra a última pesagem salva */
 function renderIdleGauge(){
@@ -1246,11 +1546,12 @@ function hexToBytes(h){
   for(let i=0;i<u.length;i++) u[i] = parseInt(h.substr(i*2,2),16);
   return u;
 }
-async function startNativeScan(){
+async function startNativeScan(auto){
+  if(scan) return;
   try{ await BLE.initialize({androidNeverForLocation:false}) }
-  catch(e){ toast('Permita o Bluetooth e a localização para ler a balança'); return }
-  try{ const en = await BLE.isEnabled(); if(!en.value){ try{ await BLE.requestEnable() }catch(e){ toast('Ligue o Bluetooth do celular'); return } } }catch(e){}
-  try{ const loc = await BLE.isLocationEnabled(); if(!loc.value) toast('Ligue a localização do celular para achar a balança') }catch(e){}
+  catch(e){ if(!auto) toast('Permita o Bluetooth e a localização para ler a balança'); return }
+  try{ const en = await BLE.isEnabled(); if(!en.value){ if(auto) return; try{ await BLE.requestEnable() }catch(e){ toast('Ligue o Bluetooth do celular'); return } } }catch(e){}
+  try{ const loc = await BLE.isLocationEnabled(); if(!loc.value && !auto) toast('Ligue a localização do celular para achar a balança') }catch(e){}
   seen.clear();
   try{
     nativeListener = await BLE.addListener('onScanResult', r=>{
@@ -1262,7 +1563,7 @@ async function startNativeScan(){
     });
     await BLE.requestLEScan({allowDuplicates:true, scanMode:2});
   }catch(e){ toast('Não foi possível iniciar a busca'); logText('busca nativa: '+(e.message||e)); return }
-  scan = {native:true};
+  scan = {native:true, started:Date.now(), auto:!!auto};
   setPill('busy','Buscando…'); $('#scanBox').style.display='block'; renderScan();
   $('#btnRead').textContent = 'Parar leitura'; $('#btnScan').textContent = 'Buscando…';
   $('#wstate').className='wstate'; $('#wstate').textContent='Suba na balança';
@@ -1289,6 +1590,7 @@ function onScanAdv(ev){
       lockedId = id; store.set('lockedId', lockedId); toast('Balança OKOK encontrada');
     }
   }
+  if(id===lockedId && h && scan) scan.lastData = Date.now();
   if(id===lockedId && h){
     if(h!==s.lastLogged){ s.lastLogged=h; packets.forEach(u8=>log('ADV '+(s.name||'balança'), u8)) }
     packets.forEach(u8=>parseVendor(u8));
@@ -1336,32 +1638,37 @@ function saveMeasurement(auto){
   const c = fullComp(cur.weight, null, profile);
   const t = Date.now();
   history.unshift({t, w:+cur.weight.toFixed(2), r:null, bmi:+c.bmi.toFixed(1), p: {...profile}});
+  hcWrite(history[0]);
   store.set('history', history);
   cur.savedT = t;
   $('#btnSave').disabled = true; $('#btnSave').textContent = 'Salvo ✓';
   toast(auto ? 'Medição salva automaticamente' : 'Medição salva');
   $('#wstate').textContent = 'Peso final · salvo ✓';
   renderCompare(); renderGoals(); renderMetrics(); renderRemind();
+  checkBio(t);
 }
 $('#btnSave').onclick = ()=>saveMeasurement(false);
 function renderHistory(){
   const el=$('#hist');
   renderSummary();
   if(!history.length){ el.innerHTML='<div class="empty">Nenhuma medição salva ainda.</div>'; $('#chart').innerHTML=''; $('#chartChips').innerHTML=''; $('#chartStat').innerHTML=''; return }
-  el.innerHTML = history.map((h,i)=>{
-    const c = entryComp(h);
+  el.innerHTML = visibleHist().map(h=>{
+    const c = entryComp(h), i = history.indexOf(h);
+    const badge = c.src==='combo' ? '⚖️ + ⌚' : h.src==='watch' ? '⌚ relógio' : '';
     return `<div class="hitem" data-i="${i}">
-    <div><div class="w">${h.w.toFixed(1).replace('.',',')} kg${h.src==='watch'?' <span class="tag ok" style="margin:0 0 0 4px;vertical-align:middle">⌚ relógio</span>':''}</div><div class="d">${new Date(h.t).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}</div></div>
-    <div style="display:flex;align-items:center"><div class="m">IMC ${c.bmi.toFixed(1).replace('.',',')}${c.fat!=null ? '<br>Gordura '+c.fat.toFixed(1).replace('.',',')+'%' : ''}</div>
+    <div><div class="w">${h.w.toFixed(1).replace('.',',')} kg${badge?` <span class="tag ok" style="margin:0 0 0 4px;vertical-align:middle">${badge}</span>`:''}</div><div class="d">${new Date(h.t).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}</div></div>
+    <div style="display:flex;align-items:center"><div class="m">${(()=>{ const ov = overall(c, h.p || profile), col = {ok:'var(--accent)', mid:'var(--warn)', hi:'var(--bad)', lo:'var(--low)'}[ov.cls]; return `<b style="color:${col}">${ov.title}</b>` })()}<br>IMC ${c.bmi.toFixed(1).replace('.',',')}${c.fat!=null ? ' · Gordura '+c.fat.toFixed(1).replace('.',',')+'%' : ''}</div>
     <span style="color:var(--muted);font-size:20px;margin-left:10px">›</span></div></div>`;
   }).join('');
   el.querySelectorAll('.hitem').forEach(b=>b.onclick=()=>openDetail(+b.dataset.i));
   drawChart();
 }
 function openDetail(i){
-  const h = history[i]; if(!h) return;
-  const p = h.p || profile, c = entryComp(h), isW = h.src==='watch';
-  const prev = isW ? history.slice(i+1).find(x=>x.src==='watch') : history.slice(i+1).find(x=>x.src!=='watch');
+  let h = history[i]; if(!h) return;
+  if(isMergedWatch(h)){ h = scaleOnDay(h.t); i = history.indexOf(h) }   // abre a medição combinada do dia
+  const p = h.p || profile, c = entryComp(h), isW = c.fat!=null;
+  const vis = visibleHist(), rest = vis.slice(vis.indexOf(h)+1);
+  const prev = isW ? rest.find(x=>entryComp(x).fat!=null) : rest.find(x=>x.src!=='watch');
   $('#sheetBody').innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin:6px 0 10px">
       <div><div class="small">${new Date(h.t).toLocaleString('pt-BR',{dateStyle:'full',timeStyle:'short'})}</div>
@@ -1372,7 +1679,8 @@ function openDetail(i){
     ${isW ? '<h2>Seu corpo</h2><div id="bodyDetail"></div>' : ''}
     <h2>Análise</h2>${analysisHTML(c, p)}
     ${isW ? `<h2>Composição corporal</h2><div class="grid">${metricsHTML(h.w, null, null, {}, p, c)}</div>`
-          : '<div class="note">Medição da balança: só peso e IMC. A composição corporal vem das medições do relógio.</div>'}
+          : '<div class="note">Só a pesagem da balança: nesse dia não houve medição de bioimpedância no relógio.</div>'}
+    ${c.src==='combo' ? `<p class="small" style="margin-top:10px">Bioimpedância medida no relógio às ${new Date(c.watchT).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}.</p>` : ''}
     ${h.p ? `<p class="small" style="margin-top:10px">Perfil na data: ${h.p.sex==='m'?'masculino':'feminino'}, ${h.p.age} anos, ${h.p.height} cm.</p>` : '<p class="small" style="margin-top:10px">Calculado com o seu perfil atual.</p>'}
     <button class="btn" id="sheetDel" style="width:100%;margin-top:16px;color:var(--bad)">Apagar medição</button>`;
   bodySig.detail = null;
@@ -1382,6 +1690,8 @@ function openDetail(i){
   $('#sheetDel').onclick = e=>{
     const b = e.currentTarget;
     if(!b.dataset.armed){ b.dataset.armed='1'; b.textContent='Toque de novo para confirmar'; return }
+    const del = history[i];
+    if(del && del.src!=='watch' && HB){ HB.deleteWeight({t:del.t}).catch(()=>{}); store.set('hcDeleted', [...store.get('hcDeleted', []), del.t].slice(-200)) }
     history.splice(i,1); store.set('history',history); closeDetail(); renderHistory(); renderCompare(); renderGoals(); renderWatch(); renderMetrics(); renderIdleGauge(); toast('Medição apagada');
   };
 }
@@ -1420,7 +1730,7 @@ function chartSwipeSetup(){
   box.addEventListener('pointercancel', ()=>{ sx=null; box.style.transition='transform .2s'; box.style.transform='' });
 }
 function drawChart(){
-  const pts = history.slice(0,60).reverse(), W=320, H=180, P=14;
+  const pts = visibleHist().slice(0,60).reverse(), W=320, H=180, P=14;
   if(!CHART[chartKey]) chartKey='w';
   const m = CHART[chartKey];
   const ks = Object.keys(CHART);
@@ -1495,9 +1805,22 @@ window.addEventListener('appinstalled', ()=>{ toast('App instalado'); const b=$(
 
 /* ---------- init ---------- */
 renderProfile(); renderMetrics(); renderCompare(); renderIdleGauge(); loadImp(); bleSupportNote(); renderGoals(); renderRemind(); renderScaleCard(); renderWatch(); renderHC();
+if(bio && Date.now()-bio.t > DAY) setBio(null);
+renderBio();
+renderTape();
+$('#appVersion').textContent = NATIVE ? `App Android ${BUILD ? 'versão '+BUILD.version : ''}` : 'Versão web';
 if(NATIVE){
+  $('#btnIcs').style.display = 'none';
+  $('#remNote').textContent = 'O lembrete chega como notificação do app no horário escolhido. O app também avisa na tela inicial quando a pesagem estiver atrasada. Dica: pese-se sempre no mesmo horário, em jejum, depois de ir ao banheiro e descalço.';
+  if(bio && bio.state!=='done'){ bio.state='pending'; startBioPoll() }
   syncHealth(false);
-  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') syncHealth(false) });
+  scheduleReminder(false);
+  checkUpdate();
+  setTimeout(autoStart, 800);
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState==='visible'){ syncHealth(false); autoStart() }
+    else if(scan && scan.native && scan.auto) stopScan();
+  });
 }
 if(decoder) $('#calInfo').textContent = `Peso: byte ${decoder.off}, ${decoder.end.toUpperCase()}, ÷${decoder.div}`;
 </script>

@@ -25,6 +25,15 @@ function mustReplace(text, find, repl, label) {
 if (mode === 'www') {
   fs.mkdirSync(path.join(root, 'www'), { recursive: true });
   for (const f of WEB) fs.copyFileSync(path.join(root, f), path.join(root, 'www', f));
+  // versão e repositório (usados pelo aviso de versão nova); preenchidos pelo GitHub Actions
+  const repo = process.env.GITHUB_REPOSITORY, run = process.env.GITHUB_RUN_NUMBER;
+  if (repo && run) {
+    const p = path.join(root, 'www', 'index.html');
+    const html = fs.readFileSync(p, 'utf8').replace('<script>',
+      `<script>window.APP_BUILD=${JSON.stringify({ repo, version: '1.0.' + run })};</script>\n<script>`);
+    fs.writeFileSync(p, html);
+    console.log('versão 1.0.' + run + ' de ' + repo);
+  }
   console.log('www/ pronto');
   process.exit(0);
 }
@@ -87,7 +96,8 @@ dependencies {
 // 4) Manifesto: permissões do Health Connect e telas exigidas por ele
 edit(`${app}/src/main/AndroidManifest.xml`, t => {
   const perms = ['BODY_FAT', 'WEIGHT', 'LEAN_BODY_MASS', 'BODY_WATER_MASS', 'BONE_MASS', 'BASAL_METABOLIC_RATE', 'HEIGHT']
-    .map(p => `    <uses-permission android:name="android.permission.health.READ_${p}" />`).join('\n');
+    .map(p => `    <uses-permission android:name="android.permission.health.READ_${p}" />`).join('\n')
+    + '\n    <uses-permission android:name="android.permission.health.WRITE_WEIGHT" />';
   t = mustReplace(t, '<uses-permission android:name="android.permission.INTERNET" />',
 `<uses-permission android:name="android.permission.INTERNET" />
 ${perms}
@@ -149,6 +159,14 @@ for (const d of ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi']) {
     if (fs.existsSync(path.dirname(dest))) fs.copyFileSync(path.join(root, src), dest);
   }
 }
+// ícone pequeno (branco) das notificações de lembrete
+fs.mkdirSync(path.join(root, res, 'drawable'), { recursive: true });
+fs.writeFileSync(path.join(root, res, 'drawable', 'ic_stat_balanca.xml'),
+`<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#FFFFFFFF" android:pathData="M5,3h14a2,2 0,0 1,2 2v14a2,2 0,0 1,-2 2H5a2,2 0,0 1,-2 -2V5a2,2 0,0 1,2 -2zM12,7a5,5 0,0 0,-4.6 3l1.8,0.8A3,3 0,0 1,12 9a3,3 0,0 1,2.4 1.2l-2.3,2.3 1.4,1.4 3,-3A5,5 0,0 0,12 7z"/>
+</vector>
+`);
+
 edit(`${res}/values/styles.xml`, t => mustReplace(t,
   '<item name="android:background">@drawable/splash</item>',
   '<item name="android:background">#0b0f14</item>', 'splash'));

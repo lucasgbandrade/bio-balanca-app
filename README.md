@@ -24,6 +24,10 @@ App web que lê o peso de balanças de bioimpedância Bluetooth direto do navega
 - **Conexões:** área com a balança salva, busca por sinal e pareamento.
 - **Samsung Galaxy Watch (app Android):** a composição corporal vem só do relógio. As medições de bioimpedância chegam sozinhas pelo Health Connect, entram no histórico com o selo ⌚ e aparecem em destaque na tela Medir. A balança fornece apenas peso e IMC.
 - **Deslizar entre indicadores:** em "Seu corpo" e no gráfico de evolução, passe o dedo para a esquerda ou para a direita para trocar de indicador.
+- **Bioimpedância depois da pesagem (app Android):** ao salvar uma pesagem, o app confere pela sincronização se já existe medição do relógio no mesmo dia. Se não existir, pede a medição no Galaxy Watch e fica conferindo o Health Connect (a cada 20 s, por até 30 min, e ao voltar para o app) até ela chegar.
+- **Balança + relógio juntos:** pesagem e bioimpedância do mesmo dia viram uma medição só (selo ⚖️ + ⌚): peso exato da balança com os percentuais medidos pelo relógio.
+- **Avaliação geral e classificações:** como nos apps de balança — "Saudável", "Saudável, com atenção", "Obesidade", "Obesidade oculta" ou "Gordura muito baixa". Com bioimpedância, a gordura corporal decide (categorias do ACE: atleta, em forma, aceitável, obesidade); sem ela, vale o IMC pelas faixas da OMS (peso normal, sobrepeso, obesidade graus I a III). A massa magra é classificada pelo índice de massa magra.
+- **Cintura e quadril:** registro com fita métrica, com relação cintura ÷ quadril (OMS), cintura ÷ altura e circunferência da cintura.
 - **Relatório só com medições salvas:** comparação, metas, análise e resumo usam apenas pesagens salvas; uma leitura ainda não salva aparece só no medidor, marcada como "não salvo".
 
 ## Compatibilidade
@@ -91,7 +95,10 @@ Os resultados são **estimativas** e não substituem avaliação médica ou nutr
 Além da versão web, o projeto gera um app Android (com [Capacitor](https://capacitorjs.com)) que reaproveita a mesma tela e acrescenta:
 
 - **Galaxy Watch automático:** lê pelo **Health Connect** as medições de bioimpedância que o Samsung Health grava lá (gordura, peso, massa magra, água, ossos e metabolismo). A sincronização roda ao abrir o app e ao voltar para ele.
-- **Bluetooth nativo:** lê a balança OKOK sem precisar ativar recursos experimentais do Chrome.
+- **Bluetooth nativo:** lê a balança OKOK sem precisar ativar recursos experimentais do Chrome, e começa a procurar a balança sozinho ao abrir o app (desliga após a pesagem salva ou 3 minutos sem sinal).
+- **Peso no Health Connect:** cada pesagem é gravada no Health Connect (vai para o Samsung Health) e serve de backup: ao reinstalar o app, as pesagens voltam sozinhas.
+- **Lembrete por notificação** diária ou semanal, no horário escolhido.
+- **Aviso de versão nova:** o app consulta a última release do repositório e oferece o download (só funciona com repositório público).
 
 ### Instalar
 
