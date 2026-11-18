@@ -27,6 +27,7 @@ App web que lê o peso de balanças de bioimpedância Bluetooth direto do navega
 - **Bioimpedância depois da pesagem (app Android):** ao salvar uma pesagem, o app confere pela sincronização se já existe medição do relógio no mesmo dia. Se não existir, pede a medição no Galaxy Watch e fica conferindo o Health Connect (a cada 20 s, por até 30 min, e ao voltar para o app) até ela chegar.
 - **Balança + relógio juntos:** pesagem e bioimpedância do mesmo dia viram uma medição só (selo ⚖️ + ⌚): peso exato da balança com os percentuais medidos pelo relógio.
 - **Avaliação geral e classificações:** como nos apps de balança — "Saudável", "Saudável, com atenção", "Obesidade", "Obesidade oculta" ou "Gordura muito baixa". Com bioimpedância, a gordura corporal decide (categorias do ACE: atleta, em forma, aceitável, obesidade); sem ela, vale o IMC pelas faixas da OMS (peso normal, sobrepeso, obesidade graus I a III). A massa magra é classificada pelo índice de massa magra.
+- **Variações:** o peso no medidor mostra quanto subiu ou desceu desde a pesagem salva anterior, e o cartão de bioimpedância mostra a variação de cada valor em relação à medição anterior do relógio.
 - **Cintura e quadril:** registro com fita métrica, com relação cintura ÷ quadril (OMS), cintura ÷ altura e circunferência da cintura.
 - **Relatório só com medições salvas:** comparação, metas, análise e resumo usam apenas pesagens salvas; uma leitura ainda não salva aparece só no medidor, marcada como "não salvo".
 

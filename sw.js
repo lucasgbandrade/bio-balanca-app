@@ -1,6 +1,6 @@
 // Service worker do Bio Balança: guarda o app no celular para abrir rápido e funcionar sem internet.
 // Ao publicar uma nova versão do index.html, aumente o número abaixo.
-const CACHE = 'bio-balanca-v11';
+const CACHE = 'bio-balanca-v12';
 const ARQUIVOS = [
   './',
   './index.html',

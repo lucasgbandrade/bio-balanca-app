@@ -45,7 +45,8 @@ header{display:flex;align-items:center;justify-content:space-between;padding:18p
 .gauge .center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
 .wval{font-size:64px;font-weight:800;letter-spacing:-.04em;line-height:1;font-variant-numeric:tabular-nums}
 .wunit{font-size:16px;color:var(--muted);font-weight:600;margin-top:4px}
-.wstate{margin-top:14px;font-size:13px;font-weight:600;padding:6px 12px;border-radius:999px;background:var(--panel2);color:var(--muted)}
+.wdelta{font-size:13px;font-weight:700;margin-top:6px;min-height:16px;font-variant-numeric:tabular-nums}
+.wstate{margin-top:10px;font-size:13px;font-weight:600;padding:6px 12px;border-radius:999px;background:var(--panel2);color:var(--muted)}
 .wstate.final{background:rgba(62,230,181,.14);color:var(--accent)}
 .wstate.live{background:rgba(255,181,71,.14);color:var(--warn)}
 .actions{display:flex;gap:10px;margin:16px 0 8px}
@@ -191,6 +192,7 @@ nav svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;st
       <div class="center">
         <div class="wval" id="wval">--.-</div>
         <div class="wunit">kg</div>
+        <div class="wdelta" id="wdelta"></div>
         <div class="wstate" id="wstate">Conecte a balança</div>
       </div>
     </div>
@@ -729,13 +731,28 @@ function renderWatch(){
   // destaque da última medição do relógio na tela Medir
   const card = $('#watchMain'); if(!card) return;
   if(!last){ card.innerHTML=''; return }
-  const c = entryComp(last), f = v=>v.toFixed(1).replace('.',',');
+  const c = entryComp(last), prev = all[1], pc = prev ? entryComp(prev) : null;
+  const f = (v,d=1)=>v.toFixed(d).replace('.',',');
   const days = Math.round((Date.now()-last.t)/DAY);
-  card.innerHTML = `<div class="cmp" style="cursor:pointer" id="watchMainCard"><div class="hd" style="margin-bottom:6px">⌚ Bioimpedância real do relógio · ${days<=0?'hoje':days===1?'ontem':`há ${days} dias`}</div>
-    <div class="cols">${c.fat!=null?`<div class="c"><div class="k">Gordura</div><div class="d">${f(c.fat)}<small style="font-size:11px">%</small></div></div>`:''}
-    ${c.skeletal!=null?`<div class="c"><div class="k">Músc. esquelético</div><div class="d">${f(c.skeletal)}<small style="font-size:11px">kg</small></div></div>`:''}
-    ${c.water!=null?`<div class="c"><div class="k">Água</div><div class="d">${f(c.water)}<small style="font-size:11px">%</small></div></div>`:''}
-    ${c.bmr!=null?`<div class="c"><div class="k">Metabolismo</div><div class="d">${Math.round(c.bmr)}</div></div>`:''}</div></div>`;
+  // cada valor com a variação em relação à medição anterior do relógio
+  const cell = (k, v, pv, u, dec, lowerBetter)=>{
+    if(v==null || !isFinite(v)) return '';
+    let dl = '';
+    if(pv!=null && isFinite(pv)){
+      const d = v-pv, eq = Math.abs(d) < (dec ? 0.05 : 0.5);
+      const cls = eq ? 'eq' : ((d<0)===lowerBetter ? 'good' : 'bad');
+      dl = `<div class="d ${cls}" style="font-size:12px;margin-top:2px">${eq ? '= igual' : (d<0?'▼ ':'▲ ')+f(Math.abs(d),dec)+(u&&u!=='kcal'?' '+u:'')}</div>`;
+    }
+    return `<div class="c"><div class="k">${k}</div><div class="d">${f(v,dec)}<small style="font-size:11px">${u}</small></div>${dl}</div>`;
+  };
+  card.innerHTML = `<div class="cmp" style="cursor:pointer" id="watchMainCard"><div class="hd" style="margin-bottom:6px">⌚ Bioimpedância real do relógio · ${days<=0?'hoje':days===1?'ontem':`há ${days} dias`}${prev ? ` · comparado com ${new Date(prev.t).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}` : ''}</div>
+    <div class="cols">
+      ${cell('Gordura', c.fat, pc && pc.fat, '%', 1, true)}
+      ${cell('Massa magra', c.ffm, pc && pc.ffm, 'kg', 1, false)}
+      ${cell('Músc. esquelético', c.skeletal, pc && pc.skeletal, 'kg', 1, false)}
+      ${cell('Água', c.water, pc && pc.water, '%', 1, false)}
+      ${cell('Metabolismo', c.bmr, pc && pc.bmr, 'kcal', 0, false)}
+    </div>${prev ? '' : '<div class="small" style="margin-top:6px">Na próxima medição do relógio aparece quanto cada valor subiu ou desceu.</div>'}</div>`;
   $('#watchMainCard').onclick = ()=>openDetail(history.indexOf(last));
 }
 
@@ -1181,6 +1198,7 @@ function showWeight(w, final){
   if(!final){ cur.savedT = null; $('#btnSave').textContent = 'Salvar' }
   $('#btnSave').disabled = !final || !!cur.savedT;
   renderMetrics(); renderCompare(); renderGoals(); $('#remind').innerHTML='';
+  renderWeightDelta();
   if(final && profile.autoSave && !cur.savedT && !cur.demo) saveMeasurement(true);
 }
 /* comparação com a última medição salva */
@@ -1255,6 +1273,19 @@ function renderCompare(){
   if(!prev){ el.innerHTML='<div class="cmp"><div class="hd" style="margin:0;text-align:center">Salve mais uma pesagem para ver a comparação.</div></div>'; return }
   el.innerHTML = compareHTML(entryComp(last), prev, last.t, 'Pesagens salvas');
 }
+/* variação do peso do medidor em relação à pesagem salva anterior */
+function renderWeightDelta(){
+  const el = $('#wdelta'); if(!el) return;
+  const sh = scaleHist();
+  let w, ref;
+  if(cur.weight){ w = cur.weight; ref = cur.savedT ? sh.find(h=>h.t!==cur.savedT) : sh[0] }
+  else { w = sh[0] && sh[0].w; ref = sh[1] }
+  if(!w || !ref){ el.innerHTML = ''; return }
+  const d = w - ref.w, dd = new Date(ref.t).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+  el.innerHTML = Math.abs(d) < 0.05
+    ? `<span class="d eq">= igual a ${dd}</span>`
+    : `<span class="d ${d<0?'good':'bad'}">${d<0?'▼':'▲'} ${Math.abs(d).toFixed(1).replace('.',',')} kg desde ${dd}</span>`;
+}
 /* sem leitura em andamento, o medidor mostra a última pesagem salva */
 function renderIdleGauge(){
   if(cur.weight) return;
@@ -1262,6 +1293,7 @@ function renderIdleGauge(){
   $('#wval').textContent = ls ? ls.w.toFixed(1).replace('.',',') : '--,-';
   $('#arc').setAttribute('stroke-dasharray', `${ls ? Math.min(405, ls.w/150*405) : 0} 541`);
   const st = $('#wstate'); st.className = 'wstate';
+  renderWeightDelta();
   if(!scan) st.textContent = ls ? `Última pesagem salva · ${new Date(ls.t).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}` : 'Conecte a balança';
 }
 function onWeight(w, opts={}){
@@ -1644,6 +1676,7 @@ function saveMeasurement(auto){
   $('#btnSave').disabled = true; $('#btnSave').textContent = 'Salvo ✓';
   toast(auto ? 'Medição salva automaticamente' : 'Medição salva');
   $('#wstate').textContent = 'Peso final · salvo ✓';
+  renderWeightDelta();
   renderCompare(); renderGoals(); renderMetrics(); renderRemind();
   checkBio(t);
 }
